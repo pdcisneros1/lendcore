@@ -1,0 +1,2 @@
+DATABASE_URL='postgresql://neondb_owner:npg_QB80omZwrnWd@ep-snowy-base-ag364523-pooler.c-2.eu-central-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require'
+Para restaurar: npx prisma migrate reset --force

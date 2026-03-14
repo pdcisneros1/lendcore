@@ -132,45 +132,66 @@ export class LoanService {
   static async getAll(filters?: {
     status?: LoanStatus
     clientId?: string
+    page?: number
+    pageSize?: number
   }) {
     const where: Prisma.LoanWhereInput = {}
 
     if (filters?.status) where.status = filters.status
     if (filters?.clientId) where.clientId = filters.clientId
 
-    const loans = await prisma.loan.findMany({
-      where,
-      include: {
-        client: {
-          include: {
-            individualProfile: true,
-            businessProfile: true,
+    const page = filters?.page || 1
+    const pageSize = filters?.pageSize || 50
+    const skip = (page - 1) * pageSize
+
+    const [loans, total] = await Promise.all([
+      prisma.loan.findMany({
+        where,
+        include: {
+          client: {
+            include: {
+              individualProfile: true,
+              businessProfile: true,
+            },
+          },
+          creator: true,
+          installments: {
+            select: {
+              pendingAmount: true,
+            },
+          },
+          _count: {
+            select: {
+              installments: true,
+              payments: true,
+            },
           },
         },
-        creator: true,
-        installments: {
-          select: {
-            pendingAmount: true,
-          },
-        },
-        _count: {
-          select: {
-            installments: true,
-            payments: true,
-          },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-    })
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: pageSize,
+      }),
+      prisma.loan.count({ where }),
+    ])
 
     // Agregar campo calculado para el total pendiente
-    return loans.map(loan => ({
+    const loansWithPending = loans.map(loan => ({
       ...loan,
       totalPending: loan.installments.reduce(
         (sum, inst) => sum + Number(inst.pendingAmount),
         0
       ),
     }))
+
+    return {
+      data: loansWithPending,
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages: Math.ceil(total / pageSize),
+      },
+    }
   }
 
   /**

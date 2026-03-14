@@ -29,14 +29,16 @@ export async function GET(request: NextRequest) {
         ? (statusParam as LoanStatus)
         : undefined
     const clientId = searchParams.get('clientId') || undefined
+    const page = parseInt(searchParams.get('page') || '1')
+    const pageSize = parseInt(searchParams.get('pageSize') || '50')
 
     if (statusParam && !status) {
       return NextResponse.json({ error: 'Estado de préstamo inválido' }, { status: 400 })
     }
 
-    const loans = await LoanService.getAll({ status, clientId })
+    const result = await LoanService.getAll({ status, clientId, page, pageSize })
 
-    return NextResponse.json(loans)
+    return NextResponse.json(result)
   } catch (error: unknown) {
     console.error('Error fetching loans:', error)
     return NextResponse.json(

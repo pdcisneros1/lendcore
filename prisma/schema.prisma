@@ -110,6 +110,10 @@ model Client {
   documents          Document[]
   notes              ClientNote[]
 
+  @@index([status])
+  @@index([type])
+  @@index([riskLevel])
+  @@index([createdAt])
   @@map("clients")
 }
 
@@ -312,6 +316,10 @@ model Loan {
   installments Installment[]
   payments    Payment[]
 
+  @@index([clientId])
+  @@index([status])
+  @@index([collectorId])
+  @@index([disbursementDate])
   @@map("loans")
 }
 
@@ -359,6 +367,10 @@ model Installment {
   loan Loan @relation(fields: [loanId], references: [id], onDelete: Cascade)
 
   @@unique([loanId, installmentNumber])
+  @@index([loanId])
+  @@index([status])
+  @@index([dueDate])
+  @@index([daysOverdue])
   @@map("installments")
 }
 

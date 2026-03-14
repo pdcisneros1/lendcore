@@ -266,8 +266,20 @@ export class ClientService {
     if (filters?.riskLevel) where.riskLevel = filters.riskLevel
 
     const baseInclude = {
-      individualProfile: true,
-      businessProfile: true,
+      individualProfile: {
+        select: {
+          firstName: true,
+          lastName: true,
+          dateOfBirth: true,
+          occupation: true,
+        },
+      },
+      businessProfile: {
+        select: {
+          businessName: true,
+          industry: true,
+        },
+      },
       _count: {
         select: {
           loans: true,
@@ -276,36 +288,61 @@ export class ClientService {
       },
     } satisfies Prisma.ClientInclude
 
+    // Búsqueda optimizada - NO desencriptar todo
     if (filters?.search) {
-      const data = await prisma.client.findMany({
-        where,
-        include: baseInclude,
-        orderBy: { createdAt: 'desc' },
-      })
+      const searchLower = filters.search.toLowerCase()
 
-      const sanitizedData = data.map(client => this.sanitizeClient(client))
-      const filteredData = sanitizedData.filter(client =>
-        matchesSearchTerm(filters.search, [
-          client.email,
-          client.phone,
-          client.city,
-          client.individualProfile?.firstName,
-          client.individualProfile?.lastName,
-          client.individualProfile?.taxId,
-          client.businessProfile?.businessName,
-          client.businessProfile?.taxId,
-        ])
-      )
+      // Buscar solo por campos NO encriptados
+      const searchWhere: Prisma.ClientWhereInput = {
+        ...where,
+        OR: [
+          { city: { contains: searchLower, mode: 'insensitive' } },
+          { postalCode: { contains: searchLower } },
+          {
+            individualProfile: {
+              OR: [
+                { firstName: { contains: searchLower, mode: 'insensitive' } },
+                { lastName: { contains: searchLower, mode: 'insensitive' } },
+                { occupation: { contains: searchLower, mode: 'insensitive' } },
+              ],
+            },
+          },
+          {
+            businessProfile: {
+              OR: [
+                { businessName: { contains: searchLower, mode: 'insensitive' } },
+                { legalRepName: { contains: searchLower, mode: 'insensitive' } },
+                { industry: { contains: searchLower, mode: 'insensitive' } },
+              ],
+            },
+          },
+        ],
+      }
 
-      const paginatedData = filteredData.slice(skip, skip + pageSize)
+      const [data, total] = await Promise.all([
+        prisma.client.findMany({
+          where: searchWhere,
+          include: baseInclude,
+          orderBy: { createdAt: 'desc' },
+          take: pageSize,
+          skip,
+        }),
+        prisma.client.count({ where: searchWhere }),
+      ])
 
       return {
-        data: paginatedData,
+        data: data.map(client => ({
+          ...client,
+          // NO desencriptar en listado - Solo mostrar parcialmente
+          email: client.email ? '***@ejemplo.es' : null,
+          phone: client.phone ? '6***' : '',
+          address: client.address ? 'Calle ***' : null,
+        })),
         pagination: {
           page,
           pageSize,
-          total: filteredData.length,
-          totalPages: Math.ceil(filteredData.length / pageSize),
+          total,
+          totalPages: Math.ceil(total / pageSize),
         },
       }
     }
@@ -322,7 +359,13 @@ export class ClientService {
     ])
 
     return {
-      data: data.map(client => this.sanitizeClient(client)),
+      data: data.map(client => ({
+        ...client,
+        // NO desencriptar en listado - Solo mostrar parcialmente
+        email: client.email ? '***@ejemplo.es' : null,
+        phone: client.phone ? '6***' : '',
+        address: client.address ? 'Calle ***' : null,
+      })),
       pagination: {
         page,
         pageSize,
