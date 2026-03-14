@@ -10,10 +10,10 @@ function addSecurityHeaders(response: NextResponse): NextResponse {
   const isDevelopment = process.env.NODE_ENV === 'development'
 
   // En desarrollo: más permisivo para evitar bloquear Next.js HMR
-  // En producción: CSP hardened
+  // En producción: Next.js requiere 'unsafe-inline' para sus scripts de hidratación
   const scriptSrc = isDevelopment
     ? "'self' 'unsafe-eval' 'unsafe-inline' https://vercel.live"
-    : "'self' https://vercel.live"
+    : "'self' 'unsafe-inline' https://vercel.live"
 
   const cspHeader = `
     default-src 'self';
