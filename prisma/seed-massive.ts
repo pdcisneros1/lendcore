@@ -401,7 +401,7 @@ async function main() {
         const payment = await prisma.payment.create({
           data: {
             loanId: loan.id,
-            amount: installment.paidPrincipal + installment.paidInterest,
+            amount: Number(installment.paidPrincipal) + Number(installment.paidInterest),
             paymentMethod: randomElement<PaymentMethod>(['CASH', 'BANK_TRANSFER', 'CHECK', 'CARD']),
             paidAt: installment.paidAt,
             reference: Math.random() > 0.5 ? `REF-${randomInt(100000, 999999)}` : null,
