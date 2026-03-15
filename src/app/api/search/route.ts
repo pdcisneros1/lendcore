@@ -84,9 +84,13 @@ export async function GET(request: NextRequest) {
       return permissionDeniedResponse(request, session, 'api/search', 'GLOBAL_SEARCH')
     }
 
+    // Búsqueda optimizada: limitar registros y solo traer campos necesarios
+    const searchLimit = 50 // Límite razonable para búsqueda
+
     const [clients, loans, payments, applications, promises] = await Promise.all([
       canViewClients
         ? prisma.client.findMany({
+            take: searchLimit,
             include: {
               individualProfile: true,
               businessProfile: true,
@@ -96,6 +100,7 @@ export async function GET(request: NextRequest) {
         : Promise.resolve([]),
       canViewLoans
         ? prisma.loan.findMany({
+            take: searchLimit,
             include: {
               client: {
                 include: {
@@ -109,6 +114,7 @@ export async function GET(request: NextRequest) {
         : Promise.resolve([]),
       canViewPayments
         ? prisma.payment.findMany({
+            take: searchLimit,
             include: {
               loan: {
                 include: {
@@ -126,6 +132,7 @@ export async function GET(request: NextRequest) {
         : Promise.resolve([]),
       canViewApplications
         ? prisma.creditApplication.findMany({
+            take: searchLimit,
             include: {
               client: {
                 include: {
@@ -139,6 +146,7 @@ export async function GET(request: NextRequest) {
         : Promise.resolve([]),
       canViewPromises
         ? prisma.paymentPromise.findMany({
+            take: searchLimit,
             include: {
               client: {
                 include: {
@@ -153,6 +161,9 @@ export async function GET(request: NextRequest) {
     ])
 
     const results: SearchResult[] = []
+
+    // Debug logging
+    console.log(`[Search] Query: "${query}", Fetched: ${clients.length} clients, ${loans.length} loans, ${payments.length} payments, ${applications.length} applications, ${promises.length} promises`)
 
     clients
       .filter(client => {
@@ -292,9 +303,12 @@ export async function GET(request: NextRequest) {
         })
       })
 
-    return NextResponse.json({ results: results.slice(0, 20) })
+    const finalResults = results.slice(0, 20)
+    console.log(`[Search] Returning ${finalResults.length} results for query: "${query}"`)
+
+    return NextResponse.json({ results: finalResults })
   } catch (error) {
-    console.error('Search error:', error)
+    console.error('[Search] Error:', error)
 
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Error al buscar' },
