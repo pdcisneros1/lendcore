@@ -16,6 +16,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { GlowingEffect } from '@/components/ui/glowing-effect'
+import { GradientButton } from '@/components/ui/gradient-button'
 import { auth } from '@/lib/auth'
 import { BRAND } from '@/lib/constants/brand'
 import { hasPermission } from '@/lib/constants/permissions'
@@ -226,21 +227,24 @@ export default async function DashboardHomePage() {
                 <div className="grid gap-3 sm:grid-cols-2">
                   {canCreateClient && (
                     <Link href="/dashboard/clientes/nuevo">
-                      <Button
-                        variant="outline"
-                        className="h-12 w-full rounded-2xl border-[#d6dee7] bg-white/80 text-[#14263f] hover:bg-white"
+                      <GradientButton
+                        variant="white"
+                        className="h-12 w-full rounded-2xl shadow-sm"
                       >
                         <Users className="mr-2 h-4 w-4" />
                         Nuevo cliente
-                      </Button>
+                      </GradientButton>
                     </Link>
                   )}
                   {canCreateLoan && (
                     <Link href="/dashboard/prestamos/nuevo">
-                      <Button className="h-12 w-full rounded-2xl bg-[linear-gradient(135deg,#14263f_0%,#1f3a5c_72%,#a97b36_100%)] text-white shadow-[0_18px_36px_-18px_rgba(20,38,63,0.7)]">
+                      <GradientButton
+                        variant="variant"
+                        className="h-12 w-full rounded-2xl shadow-[0_18px_36px_-18px_rgba(20,38,63,0.7)]"
+                      >
                         <Plus className="mr-2 h-4 w-4" />
                         Nuevo préstamo
-                      </Button>
+                      </GradientButton>
                     </Link>
                   )}
                 </div>

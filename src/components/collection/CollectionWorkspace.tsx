@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   Calendar,
   Clock,
+  DollarSign,
   MapPin,
   MessageCircle,
   Phone,
@@ -14,6 +15,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { InteractiveHoverButton } from '@/components/ui/interactive-hover-button'
 import { formatCurrency } from '@/lib/formatters/currency'
 import { formatDate, formatRelativeDate } from '@/lib/formatters/date'
 import { matchesSearchTerm } from '@/lib/utils/search'
@@ -266,10 +268,11 @@ export function CollectionWorkspace({
                     <div className="mt-2 flex gap-2">
                       {promise.phone && (
                         <a href={`tel:${promise.phone}`}>
-                          <Button size="sm" variant="outline">
-                            <Phone className="mr-1 h-3 w-3" />
-                            Llamar
-                          </Button>
+                          <InteractiveHoverButton
+                            text="Llamar"
+                            icon={Phone}
+                            variant="outline"
+                          />
                         </a>
                       )}
                       {promise.phone && (
@@ -278,20 +281,18 @@ export function CollectionWorkspace({
                           target="_blank"
                           rel="noopener noreferrer"
                         >
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-green-600 hover:text-green-700"
-                          >
-                            <MessageCircle className="mr-1 h-3 w-3" />
-                            WhatsApp
-                          </Button>
+                          <InteractiveHoverButton
+                            text="WhatsApp"
+                            icon={MessageCircle}
+                            variant="green"
+                          />
                         </a>
                       )}
                       <Link href={`/dashboard/clientes/${promise.clientId}`}>
-                        <Button size="sm" variant="ghost">
-                          Ver
-                        </Button>
+                        <InteractiveHoverButton
+                          text="Ver"
+                          variant="ghost"
+                        />
                       </Link>
                     </div>
                   </div>
@@ -387,10 +388,12 @@ export function CollectionWorkspace({
                   <div className="flex flex-shrink-0 flex-col gap-2">
                     {caseItem.phone && (
                       <a href={`tel:${caseItem.phone}`}>
-                        <Button size="sm" className="w-full whitespace-nowrap">
-                          <Phone className="mr-1 h-3 w-3" />
-                          Llamar
-                        </Button>
+                        <InteractiveHoverButton
+                          text="Llamar"
+                          icon={Phone}
+                          variant="dark"
+                          className="w-full whitespace-nowrap"
+                        />
                       </a>
                     )}
                     {caseItem.phone && (
@@ -399,36 +402,44 @@ export function CollectionWorkspace({
                         target="_blank"
                         rel="noopener noreferrer"
                       >
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="w-full whitespace-nowrap text-green-600 hover:text-green-700"
-                        >
-                          <MessageCircle className="mr-1 h-3 w-3" />
-                          WhatsApp
-                        </Button>
+                        <InteractiveHoverButton
+                          text="WhatsApp"
+                          icon={MessageCircle}
+                          variant="green"
+                          className="w-full whitespace-nowrap"
+                        />
                       </a>
                     )}
+                    <Link href={`/dashboard/pagos/nuevo?loanId=${caseItem.loanId}`}>
+                      <InteractiveHoverButton
+                        text="Registrar Pago"
+                        icon={DollarSign}
+                        variant="blue"
+                        className="w-full whitespace-nowrap"
+                      />
+                    </Link>
                     {caseItem.suggestedAction === 'Visita domiciliaria' && (
-                      <Button size="sm" variant="outline" className="w-full whitespace-nowrap">
-                        <MapPin className="mr-1 h-3 w-3" />
-                        Visitar
-                      </Button>
+                      <InteractiveHoverButton
+                        text="Visitar"
+                        icon={MapPin}
+                        variant="outline"
+                        className="w-full whitespace-nowrap"
+                      />
                     )}
                     {canCreateCollectionAction && (
-                      <Button
-                        size="sm"
+                      <InteractiveHoverButton
+                        text="Registrar gestión"
                         variant="outline"
                         className="w-full whitespace-nowrap"
                         onClick={() => setSelectedCase(caseItem)}
-                      >
-                        Registrar gestión
-                      </Button>
+                      />
                     )}
-                    <Link href={`/dashboard/clientes/${caseItem.clientId}`}>
-                      <Button size="sm" variant="ghost" className="w-full">
-                        Ver Cliente
-                      </Button>
+                    <Link href={`/dashboard/prestamos/${caseItem.loanId}`}>
+                      <InteractiveHoverButton
+                        text="Ver Crédito en Mora"
+                        variant="ghost"
+                        className="w-full"
+                      />
                     </Link>
                   </div>
                 </div>

@@ -8,6 +8,9 @@ import {
   CheckCircle2,
   Info,
   CalendarDays,
+  Lock,
+  User,
+  ChevronDown,
 } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
@@ -22,6 +25,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { ChangePasswordDialog } from '@/components/auth/ChangePasswordDialog'
 import { BRAND } from '@/lib/constants/brand'
 import { cn } from '@/lib/utils'
 
@@ -231,30 +235,58 @@ export function Header() {
           </DropdownMenu>
 
           <div className="flex items-center gap-2 border-l border-[#d6dee7] pl-2">
-            <div className="hidden items-center gap-2 rounded-2xl border border-white/80 bg-white/80 px-3 py-2 shadow-[0_18px_40px_-32px_rgba(20,38,63,0.4)] sm:flex">
-              <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#14263f_0%,#1f3a5c_100%)] font-semibold text-[#f1e0b8]">
-                {session?.user?.name?.[0] || session?.user?.email?.[0]?.toUpperCase() || 'U'}
-              </div>
-              <div className="flex flex-col items-start">
-                <span className="text-sm font-medium leading-none text-[#14263f]">
-                  {session?.user?.name || 'Usuario'}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {session?.user?.role || 'Admin'}
-                </span>
-              </div>
-            </div>
-
-            <Button
-              onClick={handleLogout}
-              variant="outline"
-              size="default"
-              className="h-11 rounded-2xl border-[#d6dee7] bg-white/80 font-semibold text-[#14263f] shadow-[0_18px_40px_-32px_rgba(20,38,63,0.4)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-white"
-              aria-label="Cerrar sesión"
-            >
-              <LogOut className="h-4 w-4" aria-hidden="true" />
-              <span className="hidden sm:inline">Cerrar sesión</span>
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  className="h-auto gap-2 rounded-2xl border border-white/80 bg-white/80 px-3 py-2 shadow-[0_18px_40px_-32px_rgba(20,38,63,0.4)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-white"
+                >
+                  <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#14263f_0%,#1f3a5c_100%)] font-semibold text-[#f1e0b8]">
+                    {session?.user?.name?.[0] || session?.user?.email?.[0]?.toUpperCase() || 'U'}
+                  </div>
+                  <div className="hidden flex-col items-start sm:flex">
+                    <span className="text-sm font-medium leading-none text-[#14263f]">
+                      {session?.user?.name || 'Usuario'}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {session?.user?.role || 'Admin'}
+                    </span>
+                  </div>
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>
+                  <div className="flex flex-col space-y-1">
+                    <p className="text-sm font-medium leading-none">
+                      {session?.user?.name || 'Usuario'}
+                    </p>
+                    <p className="text-xs leading-none text-muted-foreground">
+                      {session?.user?.email}
+                    </p>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <ChangePasswordDialog
+                    trigger={
+                      <button className="flex w-full items-center px-2 py-1.5 text-sm">
+                        <Lock className="mr-2 h-4 w-4" />
+                        Cambiar contraseña
+                      </button>
+                    }
+                  />
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={handleLogout}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Cerrar sesión
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </div>

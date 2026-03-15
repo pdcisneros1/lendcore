@@ -320,6 +320,8 @@ model Loan {
   @@index([status])
   @@index([collectorId])
   @@index([disbursementDate])
+  @@index([createdAt])
+  @@index([status, createdAt]) // Índice compuesto para filtrar por status y ordenar por createdAt
   @@map("loans")
 }
 
@@ -702,6 +704,7 @@ enum AuditAction {
   PROMISE_BROKEN
   COLLECTION_ACTION
   RESTRUCTURE
+  PASSWORD_CHANGED
 }
 
 model AuditLog {

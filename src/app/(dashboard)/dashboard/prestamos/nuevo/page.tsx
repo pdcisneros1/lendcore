@@ -49,6 +49,8 @@ export default async function NuevoPrestamoPage({ searchParams }: NuevoPrestamoP
           termMonths: sourceApplication.termMonths,
           proposedRate: Number(sourceApplication.proposedRate),
           paymentFrequency: sourceApplication.paymentFrequency,
+          createdAt: sourceApplication.createdAt,
+          status: sourceApplication.status,
         }
       : null
 

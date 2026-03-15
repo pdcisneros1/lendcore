@@ -90,13 +90,16 @@ export async function POST(request: NextRequest) {
 
     const payment = await PaymentService.create(paymentData, session.user.id)
 
+    // Fetch payment with allocations and updated loan data
+    const paymentWithDetails = await PaymentService.getById(payment.id)
+
     revalidatePath('/dashboard')
     revalidatePath('/dashboard/pagos')
     revalidatePath('/dashboard/reportes')
     revalidatePath('/dashboard/cobranza')
     revalidatePath(`/dashboard/prestamos/${body.loanId}`)
 
-    return NextResponse.json(payment, { status: 201 })
+    return NextResponse.json(paymentWithDetails, { status: 201 })
   } catch (error: unknown) {
     console.error('Error creating payment:', error)
 

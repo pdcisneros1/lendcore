@@ -21,9 +21,11 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { ClientCombobox } from '@/components/ui/client-combobox'
 import { LoanTypeSelector } from './LoanTypeSelector'
 import { LoanSchedulePreview } from './LoanSchedulePreview'
+import { LoanCreatedModal } from './LoanCreatedModal'
 import { Loader2, Save, Eye, Sparkles } from 'lucide-react'
 import type { AmortizationType, InterestType, PaymentFrequency } from '@prisma/client'
-import { normalizeInterestRateForInput } from '@/lib/utils/interestRate'
+import { normalizeInterestRateForInput, normalizeInterestRateForStorage } from '@/lib/utils/interestRate'
+import { calculateLoanSummary } from '@/lib/calculations/amortization'
 
 // Schema de validación
 const createLoanSchema = z.object({
@@ -32,8 +34,9 @@ const createLoanSchema = z.object({
   amortizationType: z.enum(['AMERICAN', 'FRENCH', 'GERMAN', 'SIMPLE', 'CUSTOM']),
   interestType: z.enum(['FIXED_AMOUNT', 'PERCENTAGE_MONTHLY', 'PERCENTAGE_ANNUAL']),
   interestRate: z.number().nonnegative('La tasa no puede ser negativa'),
+  fixedInterestAmount: z.number().optional(),
   termMonths: z.number().int().positive('El plazo debe ser al menos 1 mes'),
-  paymentFrequency: z.enum(['WEEKLY', 'BIWEEKLY', 'MONTHLY', 'QUARTERLY', 'CUSTOM']),
+  paymentFrequency: z.enum(['WEEKLY', 'BIWEEKLY', 'MONTHLY', 'QUARTERLY']),
   firstDueDate: z.date(),
   allowSaturdayPayments: z.boolean().default(true),
   allowSundayPayments: z.boolean().default(true),
@@ -78,6 +81,8 @@ interface SourceApplication {
   termMonths: number
   proposedRate: number
   paymentFrequency: PaymentFrequency
+  createdAt: Date
+  status: string
 }
 
 interface CreateLoanFormProps {
@@ -91,6 +96,17 @@ export function CreateLoanForm({ sourceApplication }: CreateLoanFormProps) {
   const [submitting, setSubmitting] = useState(false)
   const [showPreview, setShowPreview] = useState(true)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [showSuccessModal, setShowSuccessModal] = useState(false)
+  const [createdLoanData, setCreatedLoanData] = useState<{
+    clientName: string
+    loanNumber: string
+    amortizationType: string
+    principalAmount: number
+    termMonths: number
+    installmentAmount: number
+    finalPayment: number
+    annualRate: number
+  } | null>(null)
 
   const {
     register,
@@ -182,8 +198,69 @@ export function CreateLoanForm({ sourceApplication }: CreateLoanFormProps) {
         throw new Error(errorPayload?.error || errorPayload?.message || 'Error al crear préstamo')
       }
 
-      const result = (await response.json()) as { id: string }
-      router.push(`/dashboard/prestamos/${result.id}`)
+      const result = (await response.json()) as {
+        id: string
+        loanNumber: string
+        amortizationType: AmortizationType
+        principalAmount: number
+        termMonths: number
+        interestRate: number
+        interestType: InterestType
+        fixedInterestAmount?: number | null
+      }
+
+      // Obtener el nombre del cliente
+      const selectedClient = clients.find(c => c.id === data.clientId)
+      const clientName = selectedClient
+        ? selectedClient.type === 'INDIVIDUAL'
+          ? `${selectedClient.individualProfile?.firstName} ${selectedClient.individualProfile?.lastName}`
+          : selectedClient.businessProfile?.businessName || 'Cliente'
+        : 'Cliente'
+
+      // Calcular el cronograma para obtener los montos de las cuotas
+      const storedInterestRate = normalizeInterestRateForStorage(
+        data.interestRate,
+        data.interestType
+      )
+      const calculationInterestRate = normalizeInterestRateForInput(
+        storedInterestRate,
+        data.interestType
+      )
+
+      const { installments } = calculateLoanSummary({
+        principalAmount: data.principalAmount,
+        amortizationType: data.amortizationType,
+        interestType: data.interestType,
+        interestRate: calculationInterestRate,
+        fixedInterestAmount: data.fixedInterestAmount || undefined,
+        termMonths: data.termMonths,
+        paymentFrequency: data.paymentFrequency,
+        firstDueDate: data.firstDueDate,
+      })
+
+      // Calcular tasa anual para mostrar
+      let annualRate = 0
+      if (data.interestType === 'PERCENTAGE_ANNUAL') {
+        annualRate = data.interestRate
+      } else if (data.interestType === 'PERCENTAGE_MONTHLY') {
+        annualRate = data.interestRate * 12
+      }
+
+      // Preparar datos para el modal
+      const modalData = {
+        clientName,
+        loanNumber: result.loanNumber,
+        amortizationType: result.amortizationType,
+        principalAmount: result.principalAmount,
+        termMonths: result.termMonths,
+        installmentAmount: installments[0]?.totalAmount || 0,
+        finalPayment: installments[installments.length - 1]?.totalAmount || 0,
+        annualRate,
+      }
+
+      console.log('🎉 Préstamo creado exitosamente, mostrando modal:', modalData)
+      setCreatedLoanData(modalData)
+      setShowSuccessModal(true)
     } catch (error) {
       console.error('Error:', error)
       const errorMessage = error instanceof Error ? error.message : 'Error al crear préstamo'
@@ -269,8 +346,14 @@ export function CreateLoanForm({ sourceApplication }: CreateLoanFormProps) {
                   <p className="font-medium text-foreground">{sourceApplication.clientName}</p>
                 </div>
                 <div>
-                  <p className="text-muted-foreground">Solicitud</p>
-                  <p className="font-medium text-foreground">{sourceApplication.id}</p>
+                  <p className="text-muted-foreground">Fecha de solicitud</p>
+                  <p className="font-medium text-foreground">
+                    {new Date(sourceApplication.createdAt).toLocaleDateString('es-ES', {
+                      day: '2-digit',
+                      month: 'long',
+                      year: 'numeric'
+                    })}
+                  </p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">Monto aprobado</p>
@@ -624,6 +707,19 @@ export function CreateLoanForm({ sourceApplication }: CreateLoanFormProps) {
           )}
         </Button>
       </div>
+
+      {/* Modal de éxito */}
+      {createdLoanData && (
+        <LoanCreatedModal
+          open={showSuccessModal}
+          onClose={() => {
+            setShowSuccessModal(false)
+            // Redirigir al detalle del préstamo
+            router.push(`/dashboard/prestamos`)
+          }}
+          loanData={createdLoanData}
+        />
+      )}
     </form>
   )
 }

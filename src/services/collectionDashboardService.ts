@@ -87,7 +87,7 @@ export class CollectionDashboardService {
   }
 
   /**
-   * Obtener métricas del dashboard de cobranza
+   * Obtener métricas del dashboard de cobranza - OPTIMIZADO
    */
   static async getMetrics(userId?: string): Promise<CollectionMetrics> {
     const today = new Date()
@@ -97,36 +97,55 @@ export class CollectionDashboardService {
     const tomorrow = new Date(today)
     tomorrow.setDate(tomorrow.getDate() + 1)
 
-    // Obtener cuotas vencidas
-    const overdueInstallments = await prisma.installment.findMany({
-      where: overdueInstallmentWhere,
-      include: {
-        loan: {
-          include: {
-            client: true,
+    // Obtener PRÉSTAMOS únicos con mora (no cuotas individuales)
+    const loansInArrears = await prisma.loan.findMany({
+      where: {
+        status: { in: ['ACTIVE', 'DEFAULTED'] },
+        installments: {
+          some: overdueInstallmentWhere,
+        },
+      },
+      select: {
+        id: true,
+        installments: {
+          where: overdueInstallmentWhere,
+          select: {
+            dueDate: true,
+            pendingAmount: true,
+          },
+          orderBy: {
+            dueDate: 'asc',
           },
         },
       },
     })
 
-    const totalOverdue = overdueInstallments.length
-    const totalOverdueAmount = overdueInstallments.reduce(
-      (sum, inst) => sum + Number(inst.pendingAmount),
-      0
-    )
+    const totalOverdue = loansInArrears.length // Préstamos únicos, no cuotas
+    let totalOverdueAmount = 0
 
-    // Categorizar por días de atraso
+    // Categorizar por días de atraso del préstamo (cuota más antigua)
     let criticalCases = 0
     let highPriorityCases = 0
     let mediumPriorityCases = 0
     let lowPriorityCases = 0
 
-    overdueInstallments.forEach(inst => {
-      const daysOverdue = differenceInDays(new Date(), inst.dueDate)
-      if (daysOverdue > 90) criticalCases++
-      else if (daysOverdue > 30) highPriorityCases++
-      else if (daysOverdue > 7) mediumPriorityCases++
-      else lowPriorityCases++
+    loansInArrears.forEach(loan => {
+      // Sumar monto vencido del préstamo
+      const loanOverdueAmount = loan.installments.reduce(
+        (sum, inst) => sum + Number(inst.pendingAmount),
+        0
+      )
+      totalOverdueAmount += loanOverdueAmount
+
+      // Usar la cuota más antigua para categorizar
+      const oldestInstallment = loan.installments[0]
+      if (oldestInstallment) {
+        const daysOverdue = differenceInDays(new Date(), oldestInstallment.dueDate)
+        if (daysOverdue > 90) criticalCases++
+        else if (daysOverdue > 30) highPriorityCases++
+        else if (daysOverdue > 7) mediumPriorityCases++
+        else lowPriorityCases++
+      }
     })
 
     // Promesas de pago
@@ -203,14 +222,14 @@ export class CollectionDashboardService {
   }
 
   /**
-   * Obtener lista priorizada de casos para cobrar
+   * Obtener lista priorizada de casos para cobrar - OPTIMIZADO
    */
-  static async getPrioritizedCases(userId?: string, limit: number = 50): Promise<CollectionPriority[]> {
+  static async getPrioritizedCases(userId?: string, limit: number = 20): Promise<CollectionPriority[]> {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
     const overdueInstallmentWhere = getOverdueInstallmentWhere(today)
 
-    // Obtener préstamos con mora
+    // Obtener préstamos con mora (solo campos necesarios)
     const loansInArrears = await prisma.loan.findMany({
       where: {
         status: { in: ['ACTIVE', 'DEFAULTED'] },
@@ -218,26 +237,75 @@ export class CollectionDashboardService {
           some: overdueInstallmentWhere,
         },
       },
-      include: {
+      select: {
+        id: true,
+        loanNumber: true,
         client: {
-          include: {
-            individualProfile: true,
-            businessProfile: true,
+          select: {
+            id: true,
+            type: true,
+            phone: true,
+            individualProfile: {
+              select: {
+                firstName: true,
+                lastName: true,
+              },
+            },
+            businessProfile: {
+              select: {
+                businessName: true,
+              },
+            },
           },
         },
         installments: {
           where: overdueInstallmentWhere,
+          select: {
+            dueDate: true,
+            pendingAmount: true,
+          },
           orderBy: {
             dueDate: 'asc',
           },
         },
-        payments: {
-          orderBy: {
-            paidAt: 'desc',
-          },
-          take: 1,
-        },
       },
+      take: limit * 2,
+    })
+
+    // Obtener todas las acciones de cobranza y promesas en paralelo (batch query)
+    const loanIds = loansInArrears.map(l => l.id)
+    const [allActions, allPromises] = await Promise.all([
+      prisma.collectionAction.findMany({
+        where: { loanId: { in: loanIds } },
+        select: {
+          loanId: true,
+          actionDate: true,
+          result: true,
+        },
+        orderBy: { actionDate: 'desc' },
+      }),
+      prisma.paymentPromise.groupBy({
+        by: ['loanId'],
+        where: {
+          loanId: { in: loanIds },
+          status: 'BROKEN',
+        },
+        _count: true,
+      }),
+    ])
+
+    // Indexar por loanId para acceso O(1)
+    const actionsByLoan = new Map<string, typeof allActions>()
+    allActions.forEach(action => {
+      if (!actionsByLoan.has(action.loanId!)) {
+        actionsByLoan.set(action.loanId!, [])
+      }
+      actionsByLoan.get(action.loanId!)!.push(action)
+    })
+
+    const promisesByLoan = new Map<string, number>()
+    allPromises.forEach(p => {
+      promisesByLoan.set(p.loanId!, p._count)
     })
 
     const cases: CollectionPriority[] = []
@@ -252,30 +320,14 @@ export class CollectionDashboardService {
         0
       )
 
-      // Obtener gestiones previas
-      const collectionActions = await prisma.collectionAction.findMany({
-        where: {
-          loanId: loan.id,
-        },
-        orderBy: {
-          actionDate: 'desc',
-        },
-      })
-
-      const lastContact = collectionActions[0]
-      const failedAttempts = collectionActions.filter(
-        a =>
-          a.result &&
-          ['NO_ANSWER', 'PHONE_OFF', 'WRONG_NUMBER', 'HOSTILE'].includes(a.result)
+      // Obtener datos pre-cargados
+      const loanActions = actionsByLoan.get(loan.id) || []
+      const lastContact = loanActions[0]
+      const failedAttempts = loanActions.filter(
+        a => a.result && ['NO_ANSWER', 'PHONE_OFF', 'WRONG_NUMBER', 'HOSTILE'].includes(a.result)
       ).length
 
-      // Promesas rotas del préstamo
-      const brokenPromises = await prisma.paymentPromise.count({
-        where: {
-          loanId: loan.id,
-          status: 'BROKEN',
-        },
-      })
+      const brokenPromises = promisesByLoan.get(loan.id) || 0
 
       // Calcular score de prioridad (0-100)
       const daysScore = Math.min((daysOverdue / 90) * 40, 40) // Max 40 puntos

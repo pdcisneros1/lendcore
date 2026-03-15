@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { PaymentSuccessModal } from './PaymentSuccessModal'
 import { formatCurrency } from '@/lib/formatters/currency'
 import { formatDate } from '@/lib/formatters/date'
 import { getOpenInstallmentStatuses } from '@/lib/utils/installmentStatus'
@@ -92,6 +93,17 @@ export default function NewPaymentPageClient() {
   const [amount, setAmount] = useState('')
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodValue>('CASH')
   const [paidAt, setPaidAt] = useState(new Date().toISOString().split('T')[0])
+  const [showSuccessModal, setShowSuccessModal] = useState(false)
+  const [paymentSuccessData, setPaymentSuccessData] = useState<{
+    amount: number
+    paymentMethod: string
+    loanNumber: string
+    clientName: string
+    remainingBalance: number
+    allocatedToPrincipal: number
+    allocatedToInterest: number
+    allocatedToPenalty?: number
+  } | null>(null)
 
   useEffect(() => {
     if (!loanId) {
@@ -142,14 +154,57 @@ export default function NewPaymentPageClient() {
         }),
       })
 
-      const result = await parseResponse<{ error?: string }>(response)
+      const result = await parseResponse<{
+        error?: string
+        id: string
+        amount: number
+        paymentMethod: string
+        allocations?: Array<{
+          type: 'PRINCIPAL' | 'INTEREST' | 'PENALTY'
+          amount: number
+        }>
+        loan?: {
+          loanNumber: string
+          outstandingPrincipal: number
+          client: LoanClientSummary
+        }
+      }>(response)
 
       if (!response.ok) {
         throw new Error(result.error || 'Error al registrar el pago')
       }
 
-      router.push(`/dashboard/prestamos/${loanId}`)
-      router.refresh()
+      // Preparar datos para el modal de éxito
+      const clientName =
+        loan?.client.type === 'INDIVIDUAL'
+          ? `${loan.client.individualProfile?.firstName} ${loan.client.individualProfile?.lastName}`
+          : loan?.client.businessProfile?.businessName || 'Cliente'
+
+      const allocatedToPrincipal =
+        result.allocations?.find(a => a.type === 'PRINCIPAL')?.amount || 0
+      const allocatedToInterest =
+        result.allocations?.find(a => a.type === 'INTEREST')?.amount || 0
+      const allocatedToPenalty =
+        result.allocations?.find(a => a.type === 'PENALTY')?.amount || 0
+
+      const modalData = {
+        amount: result.amount,
+        paymentMethod: result.paymentMethod,
+        loanNumber: result.loan?.loanNumber || loan?.loanNumber || '',
+        clientName,
+        remainingBalance: result.loan?.outstandingPrincipal
+          ? toNumber(result.loan.outstandingPrincipal)
+          : 0,
+        allocatedToPrincipal,
+        allocatedToInterest,
+        allocatedToPenalty: allocatedToPenalty > 0 ? allocatedToPenalty : undefined,
+      }
+
+      console.log('🎉 Pago registrado exitosamente, mostrando modal:', modalData)
+      console.log('Result from API:', result)
+      setPaymentSuccessData(modalData)
+      setShowSuccessModal(true)
+      setSubmitting(false)
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'Error al registrar el pago'))
       setSubmitting(false)
@@ -324,6 +379,19 @@ export default function NewPaymentPageClient() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Modal de éxito */}
+      {paymentSuccessData && (
+        <PaymentSuccessModal
+          open={showSuccessModal}
+          onClose={() => {
+            setShowSuccessModal(false)
+            router.push(`/dashboard/prestamos/${loanId}`)
+            router.refresh()
+          }}
+          paymentData={paymentSuccessData}
+        />
+      )}
     </div>
   )
 }

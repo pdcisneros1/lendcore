@@ -127,7 +127,7 @@ export class LoanService {
   }
 
   /**
-   * Obtener todos los préstamos con filtros
+   * Obtener todos los préstamos con filtros - OPTIMIZADO
    */
   static async getAll(filters?: {
     status?: LoanStatus
@@ -141,29 +141,39 @@ export class LoanService {
     if (filters?.clientId) where.clientId = filters.clientId
 
     const page = filters?.page || 1
-    const pageSize = filters?.pageSize || 50
+    const pageSize = filters?.pageSize || 20 // Reducido de 50 a 20 para carga más rápida
     const skip = (page - 1) * pageSize
 
     const [loans, total] = await Promise.all([
       prisma.loan.findMany({
         where,
-        include: {
+        select: {
+          id: true,
+          loanNumber: true,
+          status: true,
+          principalAmount: true,
+          totalInterest: true,
+          interestRate: true,
+          interestType: true,
+          termMonths: true,
+          disbursementDate: true,
+          outstandingPrincipal: true, // Ya calculado en DB
           client: {
-            include: {
-              individualProfile: true,
-              businessProfile: true,
-            },
-          },
-          creator: true,
-          installments: {
             select: {
-              pendingAmount: true,
-            },
-          },
-          _count: {
-            select: {
-              installments: true,
-              payments: true,
+              type: true,
+              individualProfile: {
+                select: {
+                  firstName: true,
+                  lastName: true,
+                  taxId: true,
+                },
+              },
+              businessProfile: {
+                select: {
+                  businessName: true,
+                  taxId: true,
+                },
+              },
             },
           },
         },
@@ -174,13 +184,10 @@ export class LoanService {
       prisma.loan.count({ where }),
     ])
 
-    // Agregar campo calculado para el total pendiente
+    // Usar outstandingPrincipal que ya está calculado en la DB
     const loansWithPending = loans.map(loan => ({
       ...loan,
-      totalPending: loan.installments.reduce(
-        (sum, inst) => sum + Number(inst.pendingAmount),
-        0
-      ),
+      totalPending: Number(loan.outstandingPrincipal),
     }))
 
     return {

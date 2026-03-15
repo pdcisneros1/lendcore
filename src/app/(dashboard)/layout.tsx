@@ -2,11 +2,13 @@ import { Sidebar } from '@/components/layout/Sidebar'
 import { Header } from '@/components/layout/Header'
 import { Breadcrumbs } from '@/components/shared/Breadcrumbs'
 import { SkipToContent } from '@/components/shared/SkipToContent'
+import { InactivityDetector } from '@/components/auth/InactivityDetector'
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
       <SkipToContent />
+      <InactivityDetector />
       <div className="flex h-screen overflow-hidden bg-background">
         <Sidebar />
         <div className="flex flex-1 flex-col overflow-hidden">
