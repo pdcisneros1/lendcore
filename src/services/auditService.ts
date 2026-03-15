@@ -226,6 +226,34 @@ export class AuditService {
   }
 
   /**
+   * Crear registro de auditoría de forma segura (no bloquea si falla)
+   */
+  static async createLogSafe(
+    userId: string,
+    action: AuditAction,
+    entityType: string,
+    entityId: string,
+    oldValue?: Prisma.InputJsonValue | null,
+    newValue?: Prisma.InputJsonValue | null
+  ) {
+    try {
+      await prisma.auditLog.create({
+        data: {
+          userId,
+          action,
+          entityType,
+          entityId,
+          oldValue: oldValue || null,
+          newValue: newValue || null,
+        },
+      })
+    } catch (error) {
+      console.error('Error creating audit log:', error)
+      // No lanzar el error - solo loguearlo
+    }
+  }
+
+  /**
    * Exportar logs a CSV
    */
   static async exportToCSV(filters: AuditFilters = {}) {

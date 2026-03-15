@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { ApplicationStatus, PaymentFrequency, Prisma } from '@prisma/client'
+import { AuditService } from './auditService'
 
 export interface CreateApplicationData {
   clientId: string
@@ -110,23 +111,22 @@ export class ApplicationService {
       },
     })
 
-    // Auditoría
-    await prisma.auditLog.create({
-      data: {
-        userId,
-        action: 'CREATE',
-        entityType: 'credit_applications',
-        entityId: application.id,
-        newValue: {
-          clientId: application.clientId,
-          requestedAmount: Number(application.requestedAmount),
-          termMonths: application.termMonths,
-          proposedRate: Number(application.proposedRate),
-          paymentFrequency: application.paymentFrequency,
-          status: application.status,
-        },
-      },
-    })
+    // Auditoría (no bloquear si falla)
+    await AuditService.createLogSafe(
+      userId,
+      'CREATE',
+      'credit_applications',
+      application.id,
+      null,
+      {
+        clientId: application.clientId,
+        requestedAmount: Number(application.requestedAmount),
+        termMonths: application.termMonths,
+        proposedRate: Number(application.proposedRate),
+        paymentFrequency: application.paymentFrequency,
+        status: application.status,
+      }
+    )
 
     return application
   }
@@ -150,15 +150,14 @@ export class ApplicationService {
       },
     })
 
-    await prisma.auditLog.create({
-      data: {
-        userId,
-        action: 'UPDATE_STATUS',
-        entityType: 'credit_applications',
-        entityId: id,
-        newValue: { status: 'UNDER_REVIEW' },
-      },
-    })
+    await AuditService.createLogSafe(
+      userId,
+      'UPDATE_STATUS',
+      'credit_applications',
+      id,
+      null,
+      { status: 'UNDER_REVIEW' }
+    )
 
     return updated
   }
@@ -184,15 +183,14 @@ export class ApplicationService {
       },
     })
 
-    await prisma.auditLog.create({
-      data: {
-        userId,
-        action: 'APPROVE',
-        entityType: 'credit_applications',
-        entityId: id,
-        newValue: { status: 'APPROVED', approvalNotes: notes },
-      },
-    })
+    await AuditService.createLogSafe(
+      userId,
+      'APPROVE',
+      'credit_applications',
+      id,
+      null,
+      { status: 'APPROVED', approvalNotes: notes }
+    )
 
     return updated
   }
@@ -218,15 +216,14 @@ export class ApplicationService {
       },
     })
 
-    await prisma.auditLog.create({
-      data: {
-        userId,
-        action: 'REJECT',
-        entityType: 'credit_applications',
-        entityId: id,
-        newValue: { status: 'REJECTED', rejectionReason: reason },
-      },
-    })
+    await AuditService.createLogSafe(
+      userId,
+      'REJECT',
+      'credit_applications',
+      id,
+      null,
+      { status: 'REJECTED', rejectionReason: reason }
+    )
 
     return updated
   }
@@ -243,20 +240,18 @@ export class ApplicationService {
       data: { status: 'DISBURSED' },
     })
 
-    await prisma.auditLog.create({
-      data: {
-        userId,
-        action: 'DISBURSE',
-        entityType: 'credit_applications',
-        entityId: id,
-        oldValue: { status: application.status },
-        newValue: {
-          status: 'DISBURSED',
-          loanId: loanId || null,
-          loanNumber: loanNumber || null,
-        },
-      },
-    })
+    await AuditService.createLogSafe(
+      userId,
+      'DISBURSE',
+      'credit_applications',
+      id,
+      { status: application.status },
+      {
+        status: 'DISBURSED',
+        loanId: loanId || null,
+        loanNumber: loanNumber || null,
+      }
+    )
 
     return updated
   }
