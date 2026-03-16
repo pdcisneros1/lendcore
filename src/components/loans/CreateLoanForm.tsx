@@ -117,6 +117,7 @@ export function CreateLoanForm({ sourceApplication }: CreateLoanFormProps) {
     formState: { errors },
   } = useForm<CreateLoanFormData>({
     resolver: zodResolver(createLoanSchema),
+    mode: 'onBlur', // Validate on blur for better UX
     defaultValues: {
       amortizationType: 'AMERICAN',
       interestType: 'PERCENTAGE_MONTHLY',

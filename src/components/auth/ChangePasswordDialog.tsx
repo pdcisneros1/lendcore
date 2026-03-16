@@ -62,6 +62,7 @@ export function ChangePasswordDialog({ trigger }: ChangePasswordDialogProps) {
 
   const form = useForm<ChangePasswordFormValues>({
     resolver: zodResolver(changePasswordSchema),
+    mode: 'onBlur', // Validate on blur for immediate feedback
     defaultValues: {
       currentPassword: '',
       newPassword: '',

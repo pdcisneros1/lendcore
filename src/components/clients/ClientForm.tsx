@@ -116,6 +116,7 @@ export function ClientForm({ initialData, isEditing = false }: ClientFormProps) 
   } = useForm<ClientFormValues>({
     resolver: zodResolver(clientSchema) as Resolver<ClientFormValues>,
     defaultValues: buildDefaultValues(initialData, clientType),
+    mode: 'onBlur', // Validate on blur for better UX
   })
 
   const onSubmit = async (data: ClientFormValues) => {
