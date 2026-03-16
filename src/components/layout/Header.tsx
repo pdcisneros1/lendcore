@@ -11,6 +11,7 @@ import {
   Lock,
   User,
   ChevronDown,
+  Menu,
 } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
@@ -26,6 +27,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { ChangePasswordDialog } from '@/components/auth/ChangePasswordDialog'
+import { useMobileSidebar } from '@/components/layout/Sidebar'
 import { BRAND } from '@/lib/constants/brand'
 import { cn } from '@/lib/utils'
 import { SPAIN_TIMEZONE } from '@/lib/utils/timezone'
@@ -43,6 +45,7 @@ type HeaderNotification = {
 export function Header() {
   const router = useRouter()
   const { data: session } = useSession()
+  const { setIsOpen } = useMobileSidebar()
   const [notifications, setNotifications] = useState<HeaderNotification[]>([])
   const [loadingNotifications, setLoadingNotifications] = useState(true)
   const unreadCount = notifications.filter(notification => notification.unread).length
@@ -158,18 +161,29 @@ export function Header() {
       className="sticky top-0 z-40 border-b border-white/70 bg-[rgba(251,248,242,0.72)] shadow-[0_18px_42px_-32px_rgba(20,38,63,0.35)] backdrop-blur-xl"
       role="banner"
     >
-      <div className="flex min-h-[5.5rem] flex-wrap items-center gap-4 px-5 py-4 sm:px-6">
-        <div className="min-w-[16rem] flex-1" role="search">
+      <div className="flex min-h-[5.5rem] flex-wrap items-center gap-3 px-3 py-3 sm:px-5 sm:py-4 lg:gap-4 lg:px-6">
+        {/* Mobile Menu Button */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="lg:hidden h-10 w-10 rounded-xl border border-white/80 bg-white/80 hover:bg-white"
+          onClick={() => setIsOpen(true)}
+          aria-label="Abrir menú de navegación"
+        >
+          <Menu className="h-5 w-5" />
+        </Button>
+
+        <div className="min-w-0 flex-1" role="search">
           <GlobalSearch />
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="hidden rounded-2xl border border-white/80 bg-white/70 px-4 py-2.5 shadow-[0_16px_36px_-28px_rgba(20,38,63,0.45)] lg:block">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[#8d6730]">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className="hidden rounded-2xl border border-white/80 bg-white/70 px-3 py-2 shadow-[0_16px_36px_-28px_rgba(20,38,63,0.45)] md:px-4 md:py-2.5 xl:block">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#8d6730] md:text-[11px] md:tracking-[0.28em]">
               {BRAND.internalEnvironmentLabel}
             </p>
-            <div className="mt-1 flex items-center gap-2 text-sm text-[#14263f]">
-              <CalendarDays className="h-4 w-4 text-[#a97b36]" />
+            <div className="mt-1 flex items-center gap-2 text-xs text-[#14263f] md:text-sm">
+              <CalendarDays className="h-3.5 w-3.5 text-[#a97b36] md:h-4 md:w-4" />
               <span className="capitalize">{todayLabel}</span>
             </div>
           </div>
@@ -238,17 +252,17 @@ export function Header() {
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <div className="flex items-center gap-2 border-l border-[#d6dee7] pl-2">
+          <div className="flex items-center gap-2 border-l border-[#d6dee7] pl-2 sm:pl-3">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
-                  className="h-auto gap-2 rounded-2xl border border-white/80 bg-white/80 px-3 py-2 shadow-[0_18px_40px_-32px_rgba(20,38,63,0.4)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-white"
+                  className="h-auto gap-2 rounded-2xl border border-white/80 bg-white/80 px-2 py-1.5 shadow-[0_18px_40px_-32px_rgba(20,38,63,0.4)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-white sm:px-3 sm:py-2"
                 >
-                  <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#14263f_0%,#1f3a5c_100%)] font-semibold text-[#f1e0b8]">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#14263f_0%,#1f3a5c_100%)] text-sm font-semibold text-[#f1e0b8] sm:h-9 sm:w-9">
                     {session?.user?.name?.[0] || session?.user?.email?.[0]?.toUpperCase() || 'U'}
                   </div>
-                  <div className="hidden flex-col items-start sm:flex">
+                  <div className="hidden flex-col items-start md:flex">
                     <span className="text-sm font-medium leading-none text-[#14263f]">
                       {session?.user?.name || 'Usuario'}
                     </span>
@@ -256,7 +270,7 @@ export function Header() {
                       {session?.user?.role || 'Admin'}
                     </span>
                   </div>
-                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                  <ChevronDown className="hidden h-4 w-4 text-muted-foreground sm:block" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">

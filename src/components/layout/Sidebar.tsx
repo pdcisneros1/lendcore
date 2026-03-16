@@ -14,13 +14,14 @@ import {
   Users,
   WalletCards,
 } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useMemo, useState, createContext, useContext } from 'react'
 import { BrandMark } from '@/components/brand/BrandMark'
 import { useAuth } from '@/hooks/useAuth'
 import { BRAND } from '@/lib/constants/brand'
 import { NAVIGATION_ITEMS } from '@/lib/constants/config'
 import { type AppPermission, canAccessPermission } from '@/lib/constants/permissions'
 import { cn } from '@/lib/utils'
+import { Sheet, SheetContent } from '@/components/ui/sheet'
 
 const iconMap = {
   LayoutDashboard,
@@ -50,7 +51,33 @@ type SidebarItem = {
   children?: SidebarChild[]
 }
 
-export function Sidebar() {
+// Context for mobile sidebar state
+type MobileSidebarContextType = {
+  isOpen: boolean
+  setIsOpen: (open: boolean) => void
+}
+
+const MobileSidebarContext = createContext<MobileSidebarContextType | null>(null)
+
+export function useMobileSidebar() {
+  const context = useContext(MobileSidebarContext)
+  if (!context) {
+    throw new Error('useMobileSidebar must be used within MobileSidebarProvider')
+  }
+  return context
+}
+
+export function MobileSidebarProvider({ children }: { children: React.ReactNode }) {
+  const [isOpen, setIsOpen] = useState(false)
+
+  return (
+    <MobileSidebarContext.Provider value={{ isOpen, setIsOpen }}>
+      {children}
+    </MobileSidebarContext.Provider>
+  )
+}
+
+function SidebarContent({ onLinkClick }: { onLinkClick?: () => void }) {
   const pathname = usePathname()
   const { user, role } = useAuth()
   const [expandedItems, setExpandedItems] = useState<string[]>(['Operaciones'])
@@ -98,10 +125,7 @@ export function Sidebar() {
   }, [role])
 
   return (
-    <aside
-      className="flex h-screen w-72 flex-col border-r border-[#1e3556] bg-[linear-gradient(180deg,#152844_0%,#102038_52%,#0d1727_100%)] text-slate-100 shadow-[0_24px_60px_-36px_rgba(13,23,39,0.9)]"
-      aria-label="Navegación principal"
-    >
+    <>
       <div className="border-b border-white/10 px-6 py-6">
         <BrandMark theme="inverse" variant="compact" />
         <p className="mt-3 text-sm leading-6 text-slate-300">
@@ -165,6 +189,7 @@ export function Sidebar() {
                         <Link
                           key={child.href}
                           href={child.href}
+                          onClick={onLinkClick}
                           aria-current={isChildActive ? 'page' : undefined}
                           className={cn(
                             'flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm transition-all duration-200',
@@ -188,6 +213,7 @@ export function Sidebar() {
             <Link
               key={label}
               href={href!}
+              onClick={onLinkClick}
               aria-current={isActive ? 'page' : undefined}
               className={cn(
                 'flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-medium transition-all duration-200',
@@ -220,6 +246,42 @@ export function Sidebar() {
         </p>
         <p className="mt-2 text-xs text-slate-400">© 2026 {BRAND.name}</p>
       </div>
-    </aside>
+    </>
+  )
+}
+
+// Desktop Sidebar
+export function Sidebar() {
+  return (
+    <>
+      {/* Desktop Sidebar - Hidden on mobile */}
+      <aside
+        className="hidden lg:flex h-screen w-72 flex-col border-r border-[#1e3556] bg-[linear-gradient(180deg,#152844_0%,#102038_52%,#0d1727_100%)] text-slate-100 shadow-[0_24px_60px_-36px_rgba(13,23,39,0.9)]"
+        aria-label="Navegación principal"
+      >
+        <SidebarContent />
+      </aside>
+
+      {/* Mobile Sidebar - Drawer */}
+      <MobileSidebar />
+    </>
+  )
+}
+
+// Mobile Sidebar Drawer
+function MobileSidebar() {
+  const { isOpen, setIsOpen } = useMobileSidebar()
+
+  return (
+    <Sheet open={isOpen} onOpenChange={setIsOpen}>
+      <SheetContent
+        side="left"
+        className="w-72 p-0 bg-[linear-gradient(180deg,#152844_0%,#102038_52%,#0d1727_100%)] text-slate-100 border-r border-[#1e3556]"
+      >
+        <div className="flex h-full flex-col">
+          <SidebarContent onLinkClick={() => setIsOpen(false)} />
+        </div>
+      </SheetContent>
+    </Sheet>
   )
 }
