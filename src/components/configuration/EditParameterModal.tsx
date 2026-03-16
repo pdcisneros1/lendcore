@@ -59,6 +59,8 @@ export function EditParameterModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
+    // Guard clause: prevenir doble envío
+    if (loading) return
     if (!parameter) return
 
     // Validaciones

@@ -8,6 +8,7 @@ import { LoanStatus } from '@prisma/client'
 import { withCreateRateLimit, withAPIRateLimit } from '@/lib/security/rateLimitMiddleware'
 import { getErrorMessage, isZodValidationError } from '@/lib/utils/errorMessages'
 import { clampIntegerParam, PAGINATION_LIMITS } from '@/lib/utils/apiParams'
+import { validateActiveUser } from '@/lib/utils/userValidation'
 
 export async function GET(request: NextRequest) {
   try {
@@ -68,6 +69,12 @@ export async function POST(request: NextRequest) {
 
     if (!hasPermission(session.user.role, 'LOANS_CREATE')) {
       return NextResponse.json({ error: 'Sin permisos' }, { status: 403 })
+    }
+
+    // Validar que el usuario sigue activo en la base de datos
+    const userValidation = await validateActiveUser(session.user.id)
+    if (!userValidation.isValid) {
+      return userValidation.response
     }
 
     const rateLimitResponse = await withCreateRateLimit(request, session.user.id)

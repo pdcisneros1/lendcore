@@ -177,6 +177,9 @@ export function CreateLoanForm({ sourceApplication }: CreateLoanFormProps) {
   }, [])
 
   const onSubmit = async (data: CreateLoanFormData) => {
+    // Guard clause: prevenir doble envío
+    if (submitting) return
+
     setSubmitting(true)
     setSubmitError(null)
     try {

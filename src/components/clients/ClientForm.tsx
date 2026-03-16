@@ -120,6 +120,9 @@ export function ClientForm({ initialData, isEditing = false }: ClientFormProps) 
   })
 
   const onSubmit = async (data: ClientFormValues) => {
+    // Guard clause: prevenir doble envío
+    if (loading) return
+
     setLoading(true)
     setError('')
 

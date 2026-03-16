@@ -28,17 +28,27 @@ export function middleware(request: NextRequest) {
   )
 
   // Content Security Policy - Solo para páginas HTML
+  // Nota: Next.js requiere 'unsafe-inline' para scripts de hidratación en desarrollo
+  // En producción, idealmente se usaría nonce o hash, pero 'unsafe-inline' es necesario para estilos dinámicos
   if (request.nextUrl.pathname.startsWith('/dashboard') || request.nextUrl.pathname === '/login') {
+    const isDev = process.env.NODE_ENV === 'development'
+
     response.headers.set(
       'Content-Security-Policy',
       [
         "default-src 'self'",
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+        // En producción evitamos 'unsafe-eval', en desarrollo Next.js lo requiere para HMR
+        isDev
+          ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
+          : "script-src 'self' 'unsafe-inline'",
         "style-src 'self' 'unsafe-inline'",
-        "img-src 'self' data: https:",
+        "img-src 'self' data: https: blob:",
         "font-src 'self' data:",
         "connect-src 'self'",
         "frame-ancestors 'none'",
+        "base-uri 'self'",
+        "form-action 'self'",
+        "object-src 'none'",
       ].join('; ')
     )
   }

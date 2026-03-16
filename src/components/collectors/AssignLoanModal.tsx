@@ -83,6 +83,8 @@ export function AssignLoanModal({
   }
 
   const handleAssign = async () => {
+    // Guard clause: prevenir doble envío
+    if (assigning) return
     if (selectedLoans.size === 0) return
 
     setAssigning(true)

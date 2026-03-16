@@ -14,6 +14,7 @@ import {
 } from '@/lib/utils/errorMessages'
 import { clampIntegerParam, PAGINATION_LIMITS } from '@/lib/utils/apiParams'
 import { logServerError } from '@/lib/utils/errorLogger'
+import { validateActiveUser } from '@/lib/utils/userValidation'
 
 export async function GET(request: NextRequest) {
   const session = await auth()
@@ -115,6 +116,12 @@ export async function POST(request: NextRequest) {
 
     if (!hasPermission(session.user.role, 'CLIENTS_CREATE')) {
       return NextResponse.json({ error: 'Sin permisos' }, { status: 403 })
+    }
+
+    // Validar que el usuario sigue activo en la base de datos
+    const userValidation = await validateActiveUser(session.user.id)
+    if (!userValidation.isValid) {
+      return userValidation.response
     }
 
     // Rate limiting: 20 creaciones por hora

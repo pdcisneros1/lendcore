@@ -7,6 +7,7 @@ import { PaymentMethod } from '@prisma/client'
 import { withAPIRateLimit, withCreateRateLimit } from '@/lib/security/rateLimitMiddleware'
 import { getErrorMessage } from '@/lib/utils/errorMessages'
 import { clampIntegerParam, PAGINATION_LIMITS } from '@/lib/utils/apiParams'
+import { validateActiveUser } from '@/lib/utils/userValidation'
 
 function parsePaidAtValue(value?: string) {
   if (!value) return undefined
@@ -39,6 +40,12 @@ export async function POST(request: NextRequest) {
 
     if (!hasPermission(session.user.role, 'PAYMENTS_REGISTER')) {
       return NextResponse.json({ error: 'Sin permisos' }, { status: 403 })
+    }
+
+    // Validar que el usuario sigue activo en la base de datos
+    const userValidation = await validateActiveUser(session.user.id)
+    if (!userValidation.isValid) {
+      return userValidation.response
     }
 
     const rateLimitResponse = await withCreateRateLimit(request, session.user.id)

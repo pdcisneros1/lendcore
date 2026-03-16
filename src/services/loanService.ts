@@ -251,36 +251,7 @@ export class LoanService {
       throw new Error('La solicitud no corresponde al cliente seleccionado')
     }
 
-    // Verificar cliente existe
-    const client = await prisma.client.findUnique({
-      where: { id: data.clientId },
-    })
-
-    if (!client) {
-      throw new Error('Cliente no encontrado')
-    }
-
-    // Verificar cupo disponible
-    const totalExposure = await prisma.loan.aggregate({
-      where: {
-        clientId: data.clientId,
-        status: 'ACTIVE',
-      },
-      _sum: {
-        outstandingPrincipal: true,
-      },
-    })
-
-    const exposure = Number(totalExposure._sum.outstandingPrincipal || 0)
-    const availableCredit = Number(client.creditLimit) - exposure
-
-    if (data.principalAmount > availableCredit) {
-      throw new Error(
-        `Monto solicitado excede el cupo disponible (${availableCredit.toFixed(2)}€)`
-      )
-    }
-
-    // Generar número de préstamo
+    // Generar número de préstamo (antes de la transacción para evitar conflictos)
     const loanNumber = await this.generateLoanNumber()
 
     // NUEVO: Generar cronograma según tipo de amortización
@@ -309,7 +280,37 @@ export class LoanService {
     const finalDueDate = installments[installments.length - 1].dueDate
 
     // Crear préstamo con cuotas en una transacción
+    // La validación de cupo se hace DENTRO de la transacción para evitar race conditions
     const loan = await prisma.$transaction(async tx => {
+      // Verificar cliente existe y obtener cupo (dentro de la transacción)
+      const client = await tx.client.findUnique({
+        where: { id: data.clientId },
+      })
+
+      if (!client) {
+        throw new Error('Cliente no encontrado')
+      }
+
+      // Verificar cupo disponible (dentro de la transacción para evitar race condition)
+      const totalExposure = await tx.loan.aggregate({
+        where: {
+          clientId: data.clientId,
+          status: 'ACTIVE',
+        },
+        _sum: {
+          outstandingPrincipal: true,
+        },
+      })
+
+      const exposure = Number(totalExposure._sum.outstandingPrincipal || 0)
+      const availableCredit = Number(client.creditLimit) - exposure
+
+      if (data.principalAmount > availableCredit) {
+        throw new Error(
+          `Monto solicitado excede el cupo disponible (${availableCredit.toFixed(2)}€)`
+        )
+      }
+
       const newLoan = await tx.loan.create({
         data: {
           loanNumber,

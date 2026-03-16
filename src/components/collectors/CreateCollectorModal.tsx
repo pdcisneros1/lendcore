@@ -56,6 +56,9 @@ export function CreateCollectorModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
+    // Guard clause: prevenir doble envío
+    if (loading) return
+
     if (!name.trim() || !email.trim()) {
       toast({
         title: 'Error',

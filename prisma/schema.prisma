@@ -322,6 +322,8 @@ model Loan {
   @@index([disbursementDate])
   @@index([createdAt])
   @@index([status, createdAt]) // Índice compuesto para filtrar por status y ordenar por createdAt
+  @@index([clientId, status]) // Índice compuesto para cupo de crédito (verificar préstamos activos por cliente)
+  @@index([collectorId, status]) // Índice compuesto para KPIs de cobradores
   @@map("loans")
 }
 
@@ -373,6 +375,8 @@ model Installment {
   @@index([status])
   @@index([dueDate])
   @@index([daysOverdue])
+  @@index([loanId, status]) // Índice compuesto para calcular cuotas pendientes por préstamo
+  @@index([status, dueDate]) // Índice compuesto para alertas de vencimiento
   @@map("installments")
 }
 
@@ -535,6 +539,8 @@ model CollectionAction {
   @@index([assignedTo])
   @@index([status])
   @@index([scheduledDate])
+  @@index([clientId, status]) // Índice compuesto para historial de acciones por cliente
+  @@index([assignedTo, status]) // Índice compuesto para tareas de cobranza por usuario
   @@map("collection_actions")
 }
 
