@@ -54,7 +54,12 @@ export function ConfigurationClient({ parameters }: ConfigurationClientProps) {
   const formatValue = (param: Parameter) => {
     switch (param.type) {
       case 'DECIMAL':
-        return formatNumber(parseFloat(param.value))
+        const numValue = parseFloat(param.value)
+        // Si es un porcentaje (unidad % y valor <= 1), mostrar como porcentaje legible
+        if (param.unit === '%' && numValue <= 1) {
+          return `${(numValue * 100).toFixed(1).replace('.', ',')}%`
+        }
+        return formatNumber(numValue)
       case 'INTEGER':
         return param.value
       case 'BOOLEAN':
@@ -116,7 +121,9 @@ export function ConfigurationClient({ parameters }: ConfigurationClientProps) {
               <div className="flex items-center gap-3">
                 <div className="text-right">
                   <p className="text-2xl font-bold">{formatValue(param)}</p>
-                  {param.unit && <p className="text-xs text-muted-foreground">{param.unit}</p>}
+                  {param.unit && param.unit !== '%' && (
+                    <p className="text-xs text-muted-foreground">{param.unit}</p>
+                  )}
                 </div>
                 {param.isEditable && (
                   <Button size="sm" variant="outline" onClick={() => handleEdit(param)}>

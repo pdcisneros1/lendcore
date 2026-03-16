@@ -194,7 +194,7 @@ const DEFAULT_PARAMETERS: ParameterDefinition[] = [
     key: 'auto_approve_returning_clients',
     category: 'BUSINESS',
     type: 'BOOLEAN',
-    defaultValue: 'true',
+    defaultValue: 'false',
     description: 'Auto-aprobar clientes con buen historial',
     unit: '',
     isEditable: false, // Política de riesgo - requiere soporte
