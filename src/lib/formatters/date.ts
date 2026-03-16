@@ -1,55 +1,64 @@
 import { format, formatDistanceToNow, isToday, isTomorrow, isYesterday, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { toSpainTime } from '@/lib/utils/timezone'
 
 /**
  * Formatea una fecha en formato corto español (dd/mm/yyyy)
+ * IMPORTANTE: Convierte a hora de España antes de formatear
  */
 export function formatDate(date: Date | string | null | undefined): string {
   if (!date) return ''
 
   const dateObj = typeof date === 'string' ? parseISO(date) : date
+  const spainDate = toSpainTime(dateObj)
 
-  return format(dateObj, 'dd/MM/yyyy', { locale: es })
+  return format(spainDate, 'dd/MM/yyyy', { locale: es })
 }
 
 /**
  * Formatea una fecha en formato largo español
  * Ejemplo: "6 de marzo de 2026"
+ * IMPORTANTE: Convierte a hora de España antes de formatear
  */
 export function formatDateLong(date: Date | string | null | undefined): string {
   if (!date) return ''
 
   const dateObj = typeof date === 'string' ? parseISO(date) : date
+  const spainDate = toSpainTime(dateObj)
 
-  return format(dateObj, "d 'de' MMMM 'de' yyyy", { locale: es })
+  return format(spainDate, "d 'de' MMMM 'de' yyyy", { locale: es })
 }
 
 /**
  * Formatea fecha y hora
  * Ejemplo: "06/03/2026 14:30"
+ * IMPORTANTE: Muestra hora de España (CET/CEST)
  */
 export function formatDateTime(date: Date | string | null | undefined): string {
   if (!date) return ''
 
   const dateObj = typeof date === 'string' ? parseISO(date) : date
+  const spainDate = toSpainTime(dateObj)
 
-  return format(dateObj, 'dd/MM/yyyy HH:mm', { locale: es })
+  return format(spainDate, 'dd/MM/yyyy HH:mm', { locale: es })
 }
 
 /**
  * Formatea fecha relativa
  * Ejemplo: "hace 2 días", "en 3 días"
+ * IMPORTANTE: Calcula respecto a hora actual de España
  */
 export function formatRelativeDate(date: Date | string | null | undefined): string {
   if (!date) return ''
 
   const dateObj = typeof date === 'string' ? parseISO(date) : date
+  const spainDate = toSpainTime(dateObj)
 
-  if (isToday(dateObj)) return 'Hoy'
-  if (isTomorrow(dateObj)) return 'Mañana'
-  if (isYesterday(dateObj)) return 'Ayer'
+  if (isToday(spainDate)) return 'Hoy'
+  if (isTomorrow(spainDate)) return 'Mañana'
+  if (isYesterday(spainDate)) return 'Ayer'
 
-  return formatDistanceToNow(dateObj, {
+  return formatDistanceToNow(spainDate, {
     addSuffix: true,
     locale: es,
   })
@@ -58,13 +67,15 @@ export function formatRelativeDate(date: Date | string | null | undefined): stri
 /**
  * Obtiene solo la hora
  * Ejemplo: "14:30"
+ * IMPORTANTE: Muestra hora de España (CET/CEST)
  */
 export function formatTime(date: Date | string | null | undefined): string {
   if (!date) return ''
 
   const dateObj = typeof date === 'string' ? parseISO(date) : date
+  const spainDate = toSpainTime(dateObj)
 
-  return format(dateObj, 'HH:mm', { locale: es })
+  return format(spainDate, 'HH:mm', { locale: es })
 }
 
 /**
@@ -118,10 +129,13 @@ export function formatForInput(date: Date | string | null | undefined): string {
 
 /**
  * Formatear solo mes y año (Marzo 2026)
+ * IMPORTANTE: Convierte a hora de España antes de formatear
  */
 export function formatMonthYear(date: Date | string | null | undefined): string {
   if (!date) return ''
 
   const dateObj = typeof date === 'string' ? parseISO(date) : date
-  return format(dateObj, "MMMM 'de' yyyy", { locale: es })
+  const spainDate = toSpainTime(dateObj)
+
+  return format(spainDate, "MMMM 'de' yyyy", { locale: es })
 }

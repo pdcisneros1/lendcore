@@ -28,6 +28,7 @@ import {
 import { ChangePasswordDialog } from '@/components/auth/ChangePasswordDialog'
 import { BRAND } from '@/lib/constants/brand'
 import { cn } from '@/lib/utils'
+import { SPAIN_TIMEZONE } from '@/lib/utils/timezone'
 
 type HeaderNotification = {
   id: string
@@ -45,7 +46,10 @@ export function Header() {
   const [notifications, setNotifications] = useState<HeaderNotification[]>([])
   const [loadingNotifications, setLoadingNotifications] = useState(true)
   const unreadCount = notifications.filter(notification => notification.unread).length
+
+  // Fecha en hora de España (Bilbao/Madrid) - Europe/Madrid
   const todayLabel = new Intl.DateTimeFormat('es-ES', {
+    timeZone: SPAIN_TIMEZONE,
     weekday: 'long',
     day: 'numeric',
     month: 'long',

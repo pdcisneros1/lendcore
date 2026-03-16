@@ -1369,6 +1369,178 @@ curl https://your-domain.com/api/health/security
 
 ---
 
+## Configuración Regional y Zona Horaria
+
+### 🌍 Ubicación Operativa: España (Bilbao)
+
+**CRÍTICO**: Esta aplicación opera en **zona horaria de España** (Europe/Madrid) independientemente de dónde esté desplegado el servidor.
+
+### Configuración Regional
+
+**Ubicación**: `/src/lib/constants/config.ts`
+
+```typescript
+export const APP_CONFIG = {
+  locale: 'es-ES',              // Español de España
+  currency: 'EUR',              // Euro (€)
+  timezone: 'Europe/Madrid',    // CET (UTC+1) / CEST (UTC+2)
+}
+```
+
+### Zona Horaria: Europe/Madrid
+
+- **Invierno (CET)**: UTC+1 (último domingo de octubre - último domingo de marzo)
+- **Verano (CEST)**: UTC+2 (último domingo de marzo - último domingo de octubre)
+- **Cambio automático**: El sistema maneja automáticamente el horario de verano
+
+### Utilidades de Timezone
+
+**Ubicación**: `/src/lib/utils/timezone.ts`
+
+#### Funciones Principales
+
+```typescript
+import { getNowInSpain, toSpainTime, isTodayInSpain } from '@/lib/utils/timezone'
+
+// Obtener fecha/hora actual en España
+const now = getNowInSpain()  // Siempre hora de España, nunca UTC
+
+// Convertir cualquier fecha a hora de España
+const spainDate = toSpainTime(dbDate)  // Convierte desde UTC
+
+// Verificar si es hoy en España (no en UTC)
+const isToday = isTodayInSpain(dueDate)  // Respeta horario español
+
+// Verificar si ya pasó (en España)
+const isPast = isPastInSpain(deadline)  // 6-7 horas diferencia con Ecuador
+
+// Días desde hoy (en España)
+const daysOverdue = getDaysFromTodaySpain(dueDate)
+```
+
+#### Formatters con Timezone
+
+Todos los formatters en `/src/lib/formatters/date.ts` **automáticamente** convierten a hora de España:
+
+```typescript
+formatDate(date)        // "15/03/2026" (en hora España)
+formatDateTime(date)    // "15/03/2026 14:30" (CET/CEST)
+formatTime(date)        // "14:30" (hora España)
+formatRelativeDate(date) // "hace 2 horas" (respecto a España)
+```
+
+### Base de Datos y UTC
+
+⚠️ **IMPORTANTE**: PostgreSQL almacena **todas las fechas en UTC**
+
+**Flujo correcto**:
+1. **Guardar**: JavaScript Date → UTC (automático por PostgreSQL)
+2. **Leer**: UTC de BD → Convertir a España con `toSpainTime()`
+3. **Mostrar**: Usar formatters (ya incluyen conversión automática)
+
+**Ejemplo - Vencimiento de Cuota**:
+```typescript
+// ❌ MAL - Compara UTC con UTC (error de 6-7 horas)
+const isOverdue = installment.dueDate < new Date()
+
+// ✅ BIEN - Compara en hora de España
+const isOverdue = isPastInSpain(installment.dueDate)
+```
+
+### Diferencias Horarias
+
+| Ubicación | Zona Horaria | Diferencia |
+|-----------|--------------|------------|
+| Ecuador   | UTC-5 / UTC-6 | - |
+| España (invierno) | CET (UTC+1) | +6/+7 horas |
+| España (verano) | CEST (UTC+2) | +7/+8 horas |
+
+### Casos de Uso Críticos
+
+#### 1. Reportes Diarios
+
+```typescript
+// ✅ CORRECTO - Día según hora de España
+const startOfDay = getStartOfDaySpain()  // 00:00 España
+const endOfDay = getEndOfDaySpain()      // 23:59 España
+
+const dailyPayments = await prisma.payment.findMany({
+  where: {
+    createdAt: {
+      gte: startOfDay,
+      lte: endOfDay,
+    }
+  }
+})
+```
+
+#### 2. Vencimientos y Alertas
+
+```typescript
+// ✅ CORRECTO - Cuotas vencidas hoy (en España)
+const overdueToday = installments.filter(inst =>
+  isTodayInSpain(inst.dueDate) && inst.status !== 'PAID'
+)
+
+// ✅ CORRECTO - Días de atraso
+const daysOverdue = getDaysFromTodaySpain(installment.dueDate)
+```
+
+#### 3. Próximas Cuotas (7 días)
+
+```typescript
+// ✅ CORRECTO - Próximos 7 días en España
+const in7Days = addDaysSpain(getNowInSpain(), 7)
+
+const upcomingInstallments = await prisma.installment.findMany({
+  where: {
+    dueDate: {
+      gte: getNowInSpain(),
+      lte: in7Days,
+    },
+    status: 'PENDING'
+  }
+})
+```
+
+### Header - Fecha Actual
+
+El header muestra la fecha en **hora de España**:
+
+```typescript
+// /src/components/layout/Header.tsx
+const todayLabel = new Intl.DateTimeFormat('es-ES', {
+  timeZone: SPAIN_TIMEZONE,  // Europe/Madrid
+  weekday: 'long',
+  day: 'numeric',
+  month: 'long',
+}).format(new Date())
+
+// Resultado: "sábado, 15 de marzo" (hora España, no UTC)
+```
+
+### Verificación
+
+Para verificar que la zona horaria funciona correctamente:
+
+```typescript
+// Consola del navegador o Node.js
+import { getSpainUTCOffset, isSpainInDST } from '@/lib/utils/timezone'
+
+console.log('Offset de España:', getSpainUTCOffset())  // 60 (invierno) o 120 (verano)
+console.log('¿Horario de verano?:', isSpainInDST())    // true/false
+```
+
+### ⚠️ Warnings Comunes
+
+1. **NO usar `new Date()` directamente** para comparaciones - usar `getNowInSpain()`
+2. **NO asumir** que la hora del servidor es la correcta - siempre convertir
+3. **NO olvidar** que Ecuador y España tienen 6-7 horas de diferencia
+4. **SÍ usar** las utilidades de timezone para todas las operaciones con fechas
+5. **SÍ verificar** que los reportes incluyen datos del día correcto (España)
+
+---
+
 ## Additional Documentation
 
 - **README.md** - Setup, installation, deployment guide, and security checklist
