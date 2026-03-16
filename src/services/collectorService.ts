@@ -148,8 +148,11 @@ export class CollectorService {
         id: true,
         loanNumber: true,
         status: true,
-        totalPending: true,
-        assignedCollectorId: true,
+        principalAmount: true,
+        outstandingPrincipal: true,
+        totalPaid: true,
+        disbursementDate: true,
+        updatedAt: true,
         client: {
           select: {
             id: true,
@@ -158,11 +161,13 @@ export class CollectorService {
               select: {
                 firstName: true,
                 lastName: true,
+                taxId: true,
               },
             },
             businessProfile: {
               select: {
                 businessName: true,
+                taxId: true,
               },
             },
           },

@@ -67,7 +67,7 @@ export const loanListSelect = {
   loanNumber: true,
   status: true,
   principalAmount: true,
-  totalPending: true,
+  outstandingPrincipal: true,
   totalInterest: true,
   interestRate: true,
   interestType: true,
@@ -140,7 +140,6 @@ export const paymentListSelect = {
  */
 export const applicationListSelect = {
   id: true,
-  applicationNumber: true,
   status: true,
   requestedAmount: true,
   termMonths: true,
