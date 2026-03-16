@@ -26,8 +26,9 @@ export async function GET(request: NextRequest) {
     const monthParam = searchParams.get('month')
     const yearParam = searchParams.get('year')
 
-    let startDate: Date | undefined
-    let endDate: Date | undefined
+    // TODO: Implementar filtrado por rango de fechas en el servicio
+    let _startDate: Date | undefined
+    let _endDate: Date | undefined
 
     if (monthParam && yearParam) {
       const month = parseInt(monthParam)
@@ -37,8 +38,8 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: 'Mes o año inválido' }, { status: 400 })
       }
 
-      startDate = new Date(year, month - 1, 1)
-      endDate = new Date(year, month, 0, 23, 59, 59, 999)
+      _startDate = new Date(year, month - 1, 1)
+      _endDate = new Date(year, month, 0, 23, 59, 59, 999)
     }
 
     const report = await ReportService.getCollectionReport()

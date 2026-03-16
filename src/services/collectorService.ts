@@ -8,7 +8,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
-import { Prisma, UserRole } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 
 export interface CollectorKPIs {
   collectorId: string

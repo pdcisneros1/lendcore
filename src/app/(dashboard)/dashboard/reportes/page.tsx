@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Calendar, ChevronDown } from 'lucide-react'
+import { Calendar } from 'lucide-react'
 import type {
   AgingReportBucket,
   CollectionReportData,

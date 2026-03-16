@@ -57,7 +57,7 @@ function formatInterestRate(value: number) {
 export function ReportsWorkspace({
   portfolioReport,
   agingReport,
-  collectionReport,
+  collectionReport: _collectionReport,
   profitabilityReport,
   activeTab = 'portfolio',
   onTabChange,

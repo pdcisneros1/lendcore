@@ -214,6 +214,7 @@ export function GlobalSearch() {
                         type="button"
                         onClick={() => handleSelect(action.href)}
                         role="option"
+                        aria-selected="false"
                         aria-label={`${action.label} - Acceso rápido`}
                         className="flex items-center gap-3 rounded-2xl border border-[#e3eaf2] bg-white px-3 py-3 text-left transition-colors hover:bg-[#f8fbff]"
                       >
@@ -259,6 +260,7 @@ export function GlobalSearch() {
                         type="button"
                         onClick={() => handleSelect(result.url)}
                         role="option"
+                        aria-selected="false"
                         aria-label={`${result.title} - ${result.subtitle}`}
                         className={cn(
                           'flex w-full items-start gap-3 rounded-[1.2rem] px-3 py-3 text-left transition-colors',

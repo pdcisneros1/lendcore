@@ -2,7 +2,6 @@ import { prisma } from '@/lib/prisma'
 import { ClientType, ClientStatus, RiskLevel, Prisma } from '@prisma/client'
 import { encryptIfNeeded, decryptSafe } from '@/lib/security/encryption'
 import { DuplicateErrors, throwBusinessError } from '@/lib/utils/errorMessages'
-import { matchesSearchTerm } from '@/lib/utils/search'
 
 export interface CreateClientData {
   type: ClientType

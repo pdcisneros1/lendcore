@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Check, Loader2, X } from 'lucide-react'
+import { Check, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -22,16 +22,6 @@ interface UnassignedLoan {
   outstandingPrincipal: number
   status: string
   overdueInstallments: number
-}
-
-interface Collector {
-  id: string
-  name: string
-  email: string
-  role: string
-  _count: {
-    assignedLoans: number
-  }
 }
 
 interface AssignLoanModalProps {
@@ -114,14 +104,14 @@ export function AssignLoanModal({
         onSuccess?.()
         onOpenChange(false)
       } else {
-        const error = await res.json()
+        const errorData = await res.json()
         toast({
           title: 'Error',
-          description: error.error || 'No se pudieron asignar los préstamos',
+          description: errorData.error || 'No se pudieron asignar los préstamos',
           variant: 'destructive',
         })
       }
-    } catch (error) {
+    } catch {
       toast({
         title: 'Error',
         description: 'Error al asignar préstamos',

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Loader2, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CollectorKPICard } from './CollectorKPICard'
@@ -56,7 +56,7 @@ export function CollectorManagementTab({
   const [createModalOpen, setCreateModalOpen] = useState(false)
   const [editingCollector, setEditingCollector] = useState<Collector | null>(null)
 
-  const fetchCollectorsWithKPIs = async () => {
+  const fetchCollectorsWithKPIs = useCallback(async () => {
     setLoading(true)
     try {
       // 1. Obtener lista de cobradores (incluir inactivos)
@@ -117,11 +117,11 @@ export function CollectorManagementTab({
     } finally {
       setLoading(false)
     }
-  }
+  }, [selectedMonth, selectedYear])
 
   useEffect(() => {
     fetchCollectorsWithKPIs()
-  }, [selectedMonth, selectedYear])
+  }, [fetchCollectorsWithKPIs])
 
   const handleAssignLoanSuccess = () => {
     fetchCollectorsWithKPIs()
@@ -160,7 +160,7 @@ export function CollectorManagementTab({
           variant: 'destructive',
         })
       }
-    } catch (error) {
+    } catch {
       toast({
         title: 'Error',
         description: 'Error al eliminar cobrador',
@@ -193,7 +193,7 @@ export function CollectorManagementTab({
           variant: 'destructive',
         })
       }
-    } catch (error) {
+    } catch {
       toast({
         title: 'Error',
         description: 'Error al actualizar cobrador',

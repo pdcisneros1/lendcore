@@ -26,7 +26,8 @@ export async function GET(request: NextRequest) {
     const monthParam = searchParams.get('month')
     const yearParam = searchParams.get('year')
 
-    let asOfDate: Date | undefined
+    // TODO: Implementar filtrado por fecha en el servicio
+    let _asOfDate: Date | undefined
 
     if (monthParam && yearParam) {
       const month = parseInt(monthParam)
@@ -37,7 +38,7 @@ export async function GET(request: NextRequest) {
       }
 
       // Último día del mes como fecha de referencia
-      asOfDate = new Date(year, month, 0, 23, 59, 59, 999)
+      _asOfDate = new Date(year, month, 0, 23, 59, 59, 999)
     }
 
     const report = await ReportService.getAgingReport()

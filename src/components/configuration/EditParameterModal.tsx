@@ -121,14 +121,14 @@ export function EditParameterModal({
         onSuccess?.(updatedParam)
         onOpenChange(false)
       } else {
-        const error = await res.json()
+        const errorData = await res.json()
         toast({
           title: 'Error',
-          description: error.error || 'No se pudo actualizar el parámetro',
+          description: errorData.error || 'No se pudo actualizar el parámetro',
           variant: 'destructive',
         })
       }
-    } catch (error) {
+    } catch {
       toast({
         title: 'Error',
         description: 'Error al actualizar parámetro',

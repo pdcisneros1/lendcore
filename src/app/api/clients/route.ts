@@ -16,8 +16,9 @@ import { clampIntegerParam, PAGINATION_LIMITS } from '@/lib/utils/apiParams'
 import { logServerError } from '@/lib/utils/errorLogger'
 
 export async function GET(request: NextRequest) {
+  const session = await auth()
+
   try {
-    const session = await auth()
     if (!session?.user) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
     }
@@ -92,7 +93,6 @@ export async function GET(request: NextRequest) {
       endpoint: '/api/clients',
       method: 'GET',
       userId: session?.user?.id,
-      params: { type, status, riskLevel, search, page, pageSize },
     })
 
     if (error instanceof AppError) {

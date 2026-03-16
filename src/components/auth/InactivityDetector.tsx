@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { signOut, useSession } from 'next-auth/react'
 import {
   AlertDialog,
@@ -17,14 +17,22 @@ const INACTIVITY_TIMEOUT = 30 * 60 * 1000 // 30 minutos en milisegundos
 const WARNING_TIME = 2 * 60 * 1000 // Mostrar advertencia 2 minutos antes
 
 export function InactivityDetector() {
-  const { data: session, status } = useSession()
+  const { status } = useSession()
   const [showWarning, setShowWarning] = useState(false)
   const [countdown, setCountdown] = useState(120) // 2 minutos en segundos
   const inactivityTimer = useRef<NodeJS.Timeout | null>(null)
   const warningTimer = useRef<NodeJS.Timeout | null>(null)
   const countdownInterval = useRef<NodeJS.Timeout | null>(null)
 
-  const resetTimers = () => {
+  const handleLogout = useCallback(async () => {
+    if (inactivityTimer.current) clearTimeout(inactivityTimer.current)
+    if (warningTimer.current) clearTimeout(warningTimer.current)
+    if (countdownInterval.current) clearInterval(countdownInterval.current)
+
+    await signOut({ callbackUrl: '/login?timeout=true' })
+  }, [])
+
+  const resetTimers = useCallback(() => {
     // Limpiar timers existentes
     if (inactivityTimer.current) clearTimeout(inactivityTimer.current)
     if (warningTimer.current) clearTimeout(warningTimer.current)
@@ -57,15 +65,7 @@ export function InactivityDetector() {
     inactivityTimer.current = setTimeout(() => {
       handleLogout()
     }, INACTIVITY_TIMEOUT)
-  }
-
-  const handleLogout = async () => {
-    if (inactivityTimer.current) clearTimeout(inactivityTimer.current)
-    if (warningTimer.current) clearTimeout(warningTimer.current)
-    if (countdownInterval.current) clearInterval(countdownInterval.current)
-
-    await signOut({ callbackUrl: '/login?timeout=true' })
-  }
+  }, [status, handleLogout])
 
   const handleStayActive = () => {
     resetTimers()
@@ -101,7 +101,7 @@ export function InactivityDetector() {
       if (warningTimer.current) clearTimeout(warningTimer.current)
       if (countdownInterval.current) clearInterval(countdownInterval.current)
     }
-  }, [status])
+  }, [status, resetTimers])
 
   // No renderizar nada si no hay sesión
   if (status !== 'authenticated') return null

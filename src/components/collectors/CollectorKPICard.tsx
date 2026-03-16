@@ -40,7 +40,7 @@ interface CollectorKPICardProps {
 }
 
 export function CollectorKPICard({
-  collectorId,
+  collectorId: _collectorId,
   collectorName,
   collectorEmail,
   isActive,

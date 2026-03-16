@@ -88,14 +88,14 @@ export function CreateCollectorModal({
         onSuccess?.()
         onOpenChange(false)
       } else {
-        const error = await res.json()
+        const errorData = await res.json()
         toast({
           title: 'Error',
-          description: error.error || `No se pudo ${isEditing ? 'actualizar' : 'crear'} el cobrador`,
+          description: errorData.error || `No se pudo ${isEditing ? 'actualizar' : 'crear'} el cobrador`,
           variant: 'destructive',
         })
       }
-    } catch (error) {
+    } catch {
       toast({
         title: 'Error',
         description: `Error al ${isEditing ? 'actualizar' : 'crear'} cobrador`,

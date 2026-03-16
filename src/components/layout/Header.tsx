@@ -9,7 +9,6 @@ import {
   Info,
   CalendarDays,
   Lock,
-  User,
   ChevronDown,
   Menu,
 } from 'lucide-react'
