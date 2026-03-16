@@ -367,7 +367,14 @@ export default function NewPaymentPageClient() {
 
               <div className="flex gap-2 pt-4">
                 <Button type="submit" disabled={submitting || pendingInstallments.length === 0}>
-                  {submitting ? 'Registrando...' : 'Registrar Pago'}
+                  {submitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Registrando...
+                    </>
+                  ) : (
+                    'Registrar Pago'
+                  )}
                 </Button>
                 <Link href={`/dashboard/prestamos/${loanId}`}>
                   <Button type="button" variant="outline">

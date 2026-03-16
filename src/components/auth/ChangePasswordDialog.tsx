@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Eye, EyeOff, Lock, CheckCircle2 } from 'lucide-react'
+import { Eye, EyeOff, Lock, CheckCircle2, Loader2 } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -278,7 +278,14 @@ export function ChangePasswordDialog({ trigger }: ChangePasswordDialogProps) {
                 Cancelar
               </Button>
               <Button type="submit" disabled={isSubmitting} className="flex-1">
-                {isSubmitting ? 'Actualizando...' : 'Actualizar contraseña'}
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Actualizando...
+                  </>
+                ) : (
+                  'Actualizar contraseña'
+                )}
               </Button>
             </div>
           </form>

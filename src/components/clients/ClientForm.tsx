@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   clientSchema,
 } from '@/lib/validations/client.schema'
-import { User, Building2 } from 'lucide-react'
+import { User, Building2, Loader2 } from 'lucide-react'
 
 type ClientTypeValue = 'INDIVIDUAL' | 'BUSINESS'
 type RiskLevelValue = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
@@ -490,7 +490,14 @@ export function ClientForm({ initialData, isEditing = false }: ClientFormProps) 
           Cancelar
         </Button>
         <Button type="submit" disabled={loading}>
-          {loading ? 'Guardando...' : isEditing ? 'Actualizar Cliente' : 'Crear Cliente'}
+          {loading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Guardando...
+            </>
+          ) : (
+            isEditing ? 'Actualizar Cliente' : 'Crear Cliente'
+          )}
         </Button>
       </div>
     </form>
