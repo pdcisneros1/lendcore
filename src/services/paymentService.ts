@@ -12,6 +12,8 @@ import {
 } from '@/lib/utils/installmentStatus'
 import { TRANSACTION_CONFIG } from '@/lib/db/transactionConfig'
 import { LoanService } from './loanService'
+import { calculateLoanSummary } from '@/lib/calculations/amortization'
+import { normalizeInterestRateForInput } from '@/lib/utils/interestRate'
 import { getNowInSpain } from '@/lib/utils/timezone'
 
 export interface CreatePaymentData {
@@ -431,6 +433,232 @@ export class PaymentService {
     })
 
     return payment
+  }
+
+  /**
+   * Registrar abono directo al capital con recálculo de cuotas pendientes.
+   *
+   * El monto va 100 % a reducir el principal. Las cuotas PENDING se eliminan y
+   * se regeneran con el capital reducido, bajando los intereses futuros.
+   * Cuotas PAID / PARTIAL / OVERDUE no se modifican.
+   */
+  static async createCapitalPayment(data: CreatePaymentData, userId: string) {
+    const loan = await LoanService.getById(data.loanId)
+    if (!loan) throw new Error('Préstamo no encontrado')
+
+    if (loan.status !== 'ACTIVE' && loan.status !== 'DEFAULTED') {
+      throw new Error('Solo se pueden registrar pagos en préstamos activos o en mora')
+    }
+
+    if (!Number.isFinite(data.amount) || data.amount <= 0) {
+      throw new Error('El monto del abono debe ser mayor que 0')
+    }
+
+    if (data.amount > 10_000_000) {
+      throw new Error('El monto del abono no puede exceder 10.000.000€')
+    }
+
+    // Solo cuotas PENDING participan del recálculo
+    const pendingInstallments = loan.installments
+      .filter(inst => inst.status === 'PENDING')
+      .sort((a, b) => a.installmentNumber - b.installmentNumber)
+
+    if (pendingInstallments.length === 0) {
+      throw new Error('No hay cuotas pendientes para recalcular tras el abono al capital')
+    }
+
+    // Capital pendiente = suma de principal no pagado en cuotas PENDING
+    const outstandingPrincipal = this.roundCurrency(
+      pendingInstallments.reduce(
+        (sum, inst) =>
+          sum + Math.max(0, Number(inst.principalAmount) - Number(inst.paidPrincipal || 0)),
+        0
+      )
+    )
+
+    if (data.amount > outstandingPrincipal) {
+      throw new Error(
+        `El monto del abono (${data.amount}€) excede el capital pendiente (${outstandingPrincipal.toFixed(2)}€)`
+      )
+    }
+
+    const paymentDate = data.paidAt || getNowInSpain()
+    const newPrincipal = this.roundCurrency(outstandingPrincipal - data.amount)
+
+    // Valores anteriores para auditoría / respuesta
+    const oldInterestPerInstallment = Number(pendingInstallments[0].interestAmount)
+    const firstPendingDate = pendingInstallments[0].dueDate
+    const firstPendingNum = pendingInstallments[0].installmentNumber
+    const pendingCount = pendingInstallments.length
+
+    // Pre-calcular nuevo cronograma
+    const calcRate = normalizeInterestRateForInput(
+      Number(loan.interestRate),
+      loan.interestType
+    )
+
+    type ScheduleResult = ReturnType<typeof calculateLoanSummary>
+    let newScheduleResult: ScheduleResult | null = null
+
+    if (newPrincipal > 0) {
+      newScheduleResult = calculateLoanSummary({
+        principalAmount: newPrincipal,
+        amortizationType: loan.amortizationType,
+        interestType: loan.interestType,
+        interestRate: calcRate,
+        fixedInterestAmount: loan.fixedInterestAmount
+          ? Number(loan.fixedInterestAmount)
+          : undefined,
+        termMonths: pendingCount,
+        paymentFrequency: loan.paymentFrequency,
+        firstDueDate: firstPendingDate,
+      })
+    }
+
+    const newInterestPerInstallment = newScheduleResult
+      ? Number(newScheduleResult.installments[0]?.interestAmount || 0)
+      : 0
+
+    // Interés de cuotas no-PENDING (no cambia)
+    const nonPendingInterest = loan.installments
+      .filter(inst => inst.status !== 'PENDING')
+      .reduce((sum, inst) => sum + Number(inst.interestAmount), 0)
+
+    const newTotalInterest = this.roundCurrency(
+      nonPendingInterest + (newScheduleResult?.summary.totalInterest || 0)
+    )
+
+    // ── Transacción atómica ──────────────────────────────────────────────────
+    const payment = await prisma.$transaction(async tx => {
+      // 1. Crear registro de pago
+      const newPayment = await tx.payment.create({
+        data: {
+          loanId: data.loanId,
+          amount: data.amount,
+          paymentMethod: data.paymentMethod,
+          reference: data.reference,
+          paidAt: paymentDate,
+          processedById: userId,
+          notes: data.notes || 'Abono al capital',
+        },
+      })
+
+      // 2. Asignación: 100 % a PRINCIPAL
+      await tx.paymentAllocation.create({
+        data: {
+          paymentId: newPayment.id,
+          type: 'PRINCIPAL',
+          amount: data.amount,
+        },
+      })
+
+      // 3. Eliminar cuotas PENDING
+      await tx.installment.deleteMany({
+        where: { loanId: data.loanId, status: 'PENDING' },
+      })
+
+      // 4. Regenerar cronograma si queda capital
+      if (newPrincipal > 0 && newScheduleResult) {
+        await tx.installment.createMany({
+          data: newScheduleResult.installments.map((inst, idx) => ({
+            loanId: data.loanId,
+            installmentNumber: firstPendingNum + idx,
+            dueDate: inst.dueDate,
+            principalAmount: inst.principalAmount,
+            interestAmount: inst.interestAmount,
+            totalAmount: inst.totalAmount,
+            paidAmount: 0,
+            pendingAmount: inst.totalAmount,
+            status: 'PENDING' as const,
+          })),
+        })
+      }
+
+      // 5. Recalcular totales del préstamo
+      const updatedInstallments = await tx.installment.findMany({
+        where: { loanId: data.loanId },
+      })
+
+      const installmentOutstanding = updatedInstallments.reduce(
+        (sum, inst) => sum + Number(inst.pendingAmount || 0),
+        0
+      )
+
+      // totalPaid = suma de todos los pagos (incluye abonos a capital)
+      const allPaymentsAgg = await tx.payment.aggregate({
+        where: { loanId: data.loanId },
+        _sum: { amount: true },
+      })
+      const totalPaidFromPayments = Number(allPaymentsAgg._sum.amount || 0)
+
+      const allPaid =
+        updatedInstallments.length === 0 ||
+        updatedInstallments.every(inst => inst.status === 'PAID')
+      const isFullyPaid = allPaid && newPrincipal <= 0
+
+      const newFinalDueDate = newScheduleResult
+        ? newScheduleResult.installments[newScheduleResult.installments.length - 1].dueDate
+        : updatedInstallments.length > 0
+          ? [...updatedInstallments].sort(
+              (a, b) => b.dueDate.getTime() - a.dueDate.getTime()
+            )[0].dueDate
+          : loan.finalDueDate
+
+      await tx.loan.update({
+        where: { id: data.loanId },
+        data: {
+          outstandingPrincipal: this.roundCurrency(Math.max(0, installmentOutstanding)),
+          totalPaid: this.roundCurrency(totalPaidFromPayments),
+          totalInterest: newTotalInterest,
+          finalDueDate: newFinalDueDate,
+          status: isFullyPaid ? 'PAID' : loan.status,
+        },
+      })
+
+      // 6. Auditoría
+      await tx.auditLog.create({
+        data: {
+          userId,
+          action: 'CREATE',
+          entityType: 'payments',
+          entityId: newPayment.id,
+          newValue: {
+            type: 'CAPITAL_PAYMENT',
+            amount: data.amount,
+            paymentMethod: data.paymentMethod,
+            paidAt: paymentDate.toISOString(),
+            previousPrincipal: outstandingPrincipal,
+            newPrincipal,
+            previousInterestPerInstallment: oldInterestPerInstallment,
+            newInterestPerInstallment,
+            previousTotalInterest: this.roundCurrency(
+              loan.installments.reduce(
+                (sum, inst) => sum + Number(inst.interestAmount),
+                0
+              )
+            ),
+            newTotalInterest,
+            installmentsRecalculated: newScheduleResult?.installments.length || 0,
+          } as Prisma.InputJsonObject,
+        },
+      })
+
+      return newPayment
+    }, TRANSACTION_CONFIG.CRITICAL)
+
+    return {
+      payment,
+      capitalPaymentDetails: {
+        previousPrincipal: outstandingPrincipal,
+        newPrincipal,
+        previousInterestPerInstallment: oldInterestPerInstallment,
+        newInterestPerInstallment,
+        installmentsRecalculated: newScheduleResult?.installments.length || 0,
+        interestSavings: this.roundCurrency(
+          (oldInterestPerInstallment - newInterestPerInstallment) * pendingCount
+        ),
+      },
+    }
   }
 
   /**

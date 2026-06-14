@@ -96,6 +96,26 @@ export async function POST(request: NextRequest) {
       installmentId: body.installmentId || null,
     }
 
+    const paymentType = body.paymentType || 'INSTALLMENT'
+
+    // ── Abono al capital ──────────────────────────────────────────────────────
+    if (paymentType === 'CAPITAL') {
+      const result = await PaymentService.createCapitalPayment(paymentData, session.user.id)
+      const paymentWithDetails = await PaymentService.getById(result.payment.id)
+
+      revalidatePath('/dashboard')
+      revalidatePath('/dashboard/pagos')
+      revalidatePath('/dashboard/reportes')
+      revalidatePath('/dashboard/cobranza')
+      revalidatePath(`/dashboard/prestamos/${body.loanId}`)
+
+      return NextResponse.json(
+        { ...paymentWithDetails, capitalPaymentDetails: result.capitalPaymentDetails },
+        { status: 201 }
+      )
+    }
+
+    // ── Pago de cuota (flujo existente) ───────────────────────────────────────
     const payment = await PaymentService.create(paymentData, session.user.id)
 
     // Fetch payment with allocations and updated loan data
@@ -125,7 +145,9 @@ export async function POST(request: NextRequest) {
       message.includes('cuotas pendientes') ||
       message.includes('no se pueden registrar pagos') ||
       message.includes('ya está pagada') ||
-      message.includes('No se pudo asignar completamente')
+      message.includes('No se pudo asignar completamente') ||
+      message.includes('capital pendiente') ||
+      message.includes('cuotas pendientes para recalcular')
     ) {
       return NextResponse.json({ error: message }, { status: 400 })
     }
