@@ -68,12 +68,13 @@ export async function PATCH(
 
     const { id } = await params
     const body = await request.json() as {
-      principalAmount?:     number
-      interestRate?:        number
-      newFirstPendingDate?: string
-      pendingMonths?:       number
-      notes?:               string | null
-      clientInstructions?:  string | null
+      principalAmount?:      number
+      outstandingPrincipal?: number
+      interestRate?:         number
+      newFirstPendingDate?:  string
+      pendingMonths?:        number
+      notes?:                string | null
+      clientInstructions?:   string | null
     }
 
     // Validaciones de campos financieros
@@ -117,13 +118,24 @@ export async function PATCH(
       }
     }
 
+    if (body.outstandingPrincipal !== undefined) {
+      const outstanding = body.outstandingPrincipal
+      if (typeof outstanding !== 'number' || isNaN(outstanding) || outstanding <= 0) {
+        return NextResponse.json(
+          { error: 'El saldo pendiente de capital debe ser un número mayor a 0' },
+          { status: 400 }
+        )
+      }
+    }
+
     const updatedLoan = await LoanService.updateLoan(id, {
-      principalAmount:     body.principalAmount,
-      interestRate:        body.interestRate,
-      newFirstPendingDate: body.newFirstPendingDate ? new Date(body.newFirstPendingDate) : undefined,
-      pendingMonths:       body.pendingMonths,
-      notes:               body.notes,
-      clientInstructions:  body.clientInstructions,
+      principalAmount:      body.principalAmount,
+      outstandingPrincipal: body.outstandingPrincipal,
+      interestRate:         body.interestRate,
+      newFirstPendingDate:  body.newFirstPendingDate ? new Date(body.newFirstPendingDate) : undefined,
+      pendingMonths:        body.pendingMonths,
+      notes:                body.notes,
+      clientInstructions:   body.clientInstructions,
     }, session.user.id)
 
     return NextResponse.json(updatedLoan)

@@ -551,24 +551,28 @@ export class LoanService {
   // Edición de préstamo activo — solo ADMIN
   //
   // Campos editables:
-  //   · interestRate      — nueva tasa (% humano, ej: 10)
-  //   · newFirstPendingDate — nueva fecha para la primera cuota PENDIENTE
-  //   · pendingMonths     — nuevo número de cuotas PENDIENTES (aumentar o reducir)
+  //   · principalAmount       — corrección del monto original
+  //   · outstandingPrincipal  — saldo pendiente de capital (override directo)
+  //   · interestRate          — nueva tasa (% humano, ej: 10)
+  //   · newFirstPendingDate   — nueva fecha para la 1ª cuota no pagada
+  //   · pendingMonths         — cuántas cuotas no pagadas deben quedar
   //   · notes / clientInstructions — metadata sin recalculo
   //
-  // Las cuotas PAID / PARTIAL / OVERDUE nunca se tocan.
+  // REGLA: Solo las cuotas PAID se protegen. Todo lo demás (PENDING, OVERDUE,
+  //        PARTIAL) se borra y se regenera con los nuevos parámetros.
   // loan.firstDueDate no se modifica (campo histórico).
   // Todo el recálculo financiero ocurre en una transacción CRITICAL con AuditLog.
   // ---------------------------------------------------------------------------
   static async updateLoan(
     id: string,
     data: {
-      principalAmount?:     number       // Corrección del monto original prestado
-      interestRate?:        number       // % humano (ej: 10 = 10%)
-      newFirstPendingDate?: Date | string // fecha ISO o Date para la 1ª cuota PENDING
-      pendingMonths?:       number       // cuántas cuotas PENDING deben quedar
-      notes?:               string | null
-      clientInstructions?:  string | null
+      principalAmount?:      number       // Corrección del monto original prestado
+      outstandingPrincipal?: number       // Override directo del saldo pendiente de capital
+      interestRate?:         number       // % humano (ej: 10 = 10%)
+      newFirstPendingDate?:  Date | string // fecha ISO o Date para la 1ª cuota no pagada
+      pendingMonths?:        number       // cuántas cuotas no pagadas deben quedar
+      notes?:                string | null
+      clientInstructions?:   string | null
     },
     userId: string
   ) {
@@ -583,10 +587,11 @@ export class LoanService {
     const oldTermMonths    = loan.termMonths
 
     const hasFinancialChange =
-      data.principalAmount     !== undefined ||
-      data.interestRate        !== undefined ||
-      data.newFirstPendingDate !== undefined ||
-      data.pendingMonths       !== undefined
+      data.principalAmount      !== undefined ||
+      data.outstandingPrincipal !== undefined ||
+      data.interestRate         !== undefined ||
+      data.newFirstPendingDate  !== undefined ||
+      data.pendingMonths        !== undefined
 
     // ── Metadata-only: notas e instrucciones ──────────────────────────────────
     if (!hasFinancialChange) {
@@ -611,13 +616,16 @@ export class LoanService {
     }
 
     // ── Recálculo financiero ──────────────────────────────────────────────────
-    const pendingInstallments = loan.installments
-      .filter(inst => inst.status === 'PENDING')
+    // Cuotas recalculables = todo lo que NO sea PAID.
+    // Incluye PENDING, OVERDUE y PARTIAL — se borran y regeneran.
+    // Solo las cuotas PAID se protegen (ya fueron cobradas completamente).
+    const recalculableInstallments = loan.installments
+      .filter(inst => inst.status !== 'PAID')
       .sort((a, b) => a.installmentNumber - b.installmentNumber)
 
-    if (pendingInstallments.length === 0) {
+    if (recalculableInstallments.length === 0) {
       throw new Error(
-        'No hay cuotas PENDIENTE para recalcular. Las cuotas vencidas o parcialmente pagadas deben gestionarse manualmente.'
+        'No hay cuotas para recalcular. Todas las cuotas están pagadas.'
       )
     }
 
@@ -633,34 +641,50 @@ export class LoanService {
       : Number(loan.interestRate)
     const calcRate = normalizeInterestRateForInput(newStoredRate, loan.interestType)
 
-    // Fecha inicial de las nuevas cuotas PENDING
-    const firstPendingDueDate = data.newFirstPendingDate
+    // Fecha inicial de las nuevas cuotas
+    const firstRecalculableDueDate = data.newFirstPendingDate
       ? new Date(data.newFirstPendingDate)
-      : pendingInstallments[0].dueDate
+      : recalculableInstallments[0].dueDate
 
-    // Número de cuotas PENDING resultantes
+    // Número de cuotas resultantes
     const newPendingCount = data.pendingMonths !== undefined
       ? data.pendingMonths
-      : pendingInstallments.length
+      : recalculableInstallments.length
 
     if (newPendingCount < 1) {
       throw new Error('Debe quedar al menos 1 cuota pendiente para poder completar el préstamo.')
     }
 
-    const maxReducible = pendingInstallments.length
+    const maxReducible = recalculableInstallments.length
     // Permitir aumentar sin límite estricto; reducir hasta 1
     if (newPendingCount < 1 || newPendingCount > 120) {
       throw new Error('El número de cuotas pendientes debe estar entre 1 y 120.')
     }
 
-    // ── Ajuste de capital si el monto original fue corregido ──────────────────
-    const principalDelta = data.principalAmount !== undefined
-      ? data.principalAmount - oldPrincipalAmount
-      : 0
-    const newOutstandingPrincipal = Number(loan.outstandingPrincipal) + principalDelta
-    if (principalDelta !== 0 && newOutstandingPrincipal <= 0) {
+    // ── Determinación del capital pendiente ───────────────────────────────────
+    // Prioridad: outstandingPrincipal directo > ajuste por principalAmount > valor actual
+    let newOutstandingPrincipal: number
+
+    if (data.outstandingPrincipal !== undefined) {
+      // Override directo del admin — para corregir préstamos rotos
+      newOutstandingPrincipal = data.outstandingPrincipal
+    } else if (data.principalAmount !== undefined) {
+      // Ajuste proporcional al cambio de monto original
+      const principalDelta = data.principalAmount - oldPrincipalAmount
+      newOutstandingPrincipal = Number(loan.outstandingPrincipal) + principalDelta
+    } else {
+      // Sin cambio: calcular desde las cuotas recalculables
+      // (suma del capital pendiente de pago en cuotas que se van a regenerar)
+      newOutstandingPrincipal = recalculableInstallments.reduce(
+        (sum, inst) =>
+          sum + Math.max(0, Number(inst.principalAmount) - Number(inst.paidPrincipal || 0)),
+        0
+      )
+    }
+
+    if (newOutstandingPrincipal <= 0) {
       throw new Error(
-        'El nuevo monto del crédito no puede ser menor que el capital ya cobrado.'
+        'El saldo pendiente de capital debe ser mayor a 0. Si el préstamo está pagado, cambie su estado directamente.'
       )
     }
 
@@ -669,14 +693,14 @@ export class LoanService {
       const lastPaidDate = paidInstallments
         .sort((a, b) => a.installmentNumber - b.installmentNumber)
         .at(-1)!.dueDate
-      if (firstPendingDueDate <= lastPaidDate) {
+      if (firstRecalculableDueDate <= lastPaidDate) {
         throw new Error(
           'La nueva fecha del primer pago pendiente debe ser posterior a la última cuota ya pagada.'
         )
       }
     }
 
-    // ── Generar nuevo cronograma PENDING con calculateLoanSummary ─────────────
+    // ── Generar nuevo cronograma con calculateLoanSummary ──────────────────────
     // (usa el mismo engine que la creación original para garantizar consistencia)
     const { installments: newSchedule, summary } = calculateLoanSummary({
       principalAmount:  Math.max(0, newOutstandingPrincipal),
@@ -685,30 +709,30 @@ export class LoanService {
       interestRate:     calcRate,
       termMonths:       newPendingCount,
       paymentFrequency: loan.paymentFrequency,
-      firstDueDate:     firstPendingDueDate,
+      firstDueDate:     firstRecalculableDueDate,
     })
 
-    // Totales actualizados
-    const nonPendingInterest = loan.installments
-      .filter(inst => inst.status !== 'PENDING')
+    // Totales actualizados — solo interés de cuotas PAID se preserva
+    const paidInterest = paidInstallments
       .reduce((sum, inst) => sum + Number(inst.interestAmount), 0)
-    const newTotalInterest = Number((nonPendingInterest + summary.totalInterest).toFixed(2))
+    const newTotalInterest = Number((paidInterest + summary.totalInterest).toFixed(2))
     const newFinalDueDate  = newSchedule[newSchedule.length - 1].dueDate
     const newTermMonths    = paidInstallments.length + newPendingCount
-    const firstPendingNum  = pendingInstallments[0].installmentNumber
+    const firstRecalculableNum = recalculableInstallments[0].installmentNumber
 
     // ── Transacción atómica CRITICAL ─────────────────────────────────────────
     await prisma.$transaction(async tx => {
-      // 1. Borrar SOLO cuotas PENDING (no tienen payment allocations — 100% seguro)
+      // 1. Borrar TODAS las cuotas que NO sean PAID
+      //    (PENDING, OVERDUE, PARTIAL — se regeneran desde cero)
       await tx.installment.deleteMany({
-        where: { loanId: id, status: 'PENDING' },
+        where: { loanId: id, status: { not: 'PAID' } },
       })
 
       // 2. Insertar nuevo cronograma comenzando desde el mismo número de cuota
       await tx.installment.createMany({
         data: newSchedule.map((inst, idx) => ({
           loanId:            id,
-          installmentNumber: firstPendingNum + idx,
+          installmentNumber: firstRecalculableNum + idx,
           dueDate:           inst.dueDate,
           principalAmount:   inst.principalAmount,
           interestAmount:    inst.interestAmount,
@@ -724,9 +748,10 @@ export class LoanService {
         where: { id },
         data: {
           ...(data.principalAmount !== undefined && {
-            principalAmount:      data.principalAmount,
-            outstandingPrincipal: Math.max(0, newOutstandingPrincipal),
+            principalAmount: data.principalAmount,
           }),
+          // Siempre actualizar el outstanding con el valor correcto
+          outstandingPrincipal: Math.max(0, newOutstandingPrincipal),
           interestRate:  newStoredRate,
           totalInterest: newTotalInterest,
           finalDueDate:  newFinalDueDate,
@@ -747,7 +772,8 @@ export class LoanService {
         finalDueDate:              newFinalDueDate.toISOString(),
         termMonths:                newTermMonths,
         pendingInstallmentsCount:  newSchedule.length,
-        recalculatedFrom:          `Cuota #${firstPendingNum}`,
+        recalculatedFrom:          `Cuota #${firstRecalculableNum}`,
+        recalculableStatuses:      recalculableInstallments.map(i => i.status),
       }
 
       if (data.principalAmount !== undefined) {
@@ -762,8 +788,12 @@ export class LoanService {
         newVal.interestRateHuman = `${data.interestRate}%`
       }
       if (data.newFirstPendingDate !== undefined) {
-        oldVal.firstPendingDate = pendingInstallments[0].dueDate.toISOString()
-        newVal.firstPendingDate = firstPendingDueDate.toISOString()
+        oldVal.firstPendingDate = recalculableInstallments[0].dueDate.toISOString()
+        newVal.firstPendingDate = firstRecalculableDueDate.toISOString()
+      }
+      if (data.outstandingPrincipal !== undefined) {
+        oldVal.outstandingPrincipal = Number(loan.outstandingPrincipal)
+        newVal.outstandingPrincipal = newOutstandingPrincipal
       }
       if (data.pendingMonths !== undefined) {
         oldVal.pendingInstallments = maxReducible

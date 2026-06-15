@@ -46,8 +46,9 @@ export default async function LoanDetailPage({ params }: { params: Promise<{ id:
     session?.user?.role ? hasPermission(session.user.role, 'LOANS_EDIT') : false
   const isAdmin = session?.user?.role === UserRole.ADMIN
 
+  // Cuotas recalculables = todo lo que NO sea PAID (PENDING + OVERDUE + PARTIAL sin pago)
   const pendingInstallments = loan.installments
-    .filter(inst => inst.status === 'PENDING')
+    .filter(inst => inst.status !== 'PAID')
     .sort((a, b) => a.installmentNumber - b.installmentNumber)
   const pendingInstallmentsCount = pendingInstallments.length
   const firstPendingDueDate = pendingInstallments[0]?.dueDate ?? null

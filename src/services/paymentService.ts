@@ -440,7 +440,8 @@ export class PaymentService {
    *
    * El monto va 100 % a reducir el principal. Las cuotas PENDING se eliminan y
    * se regeneran con el capital reducido, bajando los intereses futuros.
-   * Cuotas PAID / PARTIAL / OVERDUE no se modifican.
+   * Cuotas PAID nunca se modifican. Las demás (PENDING, OVERDUE, PARTIAL)
+   * se eliminan y se regeneran con el capital reducido.
    */
   static async createCapitalPayment(data: CreatePaymentData, userId: string) {
     const loan = await LoanService.getById(data.loanId)
@@ -458,18 +459,18 @@ export class PaymentService {
       throw new Error('El monto del abono no puede exceder 10.000.000€')
     }
 
-    // Solo cuotas PENDING participan del recálculo
-    const pendingInstallments = loan.installments
-      .filter(inst => inst.status === 'PENDING')
+    // Cuotas recalculables = todo lo que NO sea PAID
+    const recalculableInstallments = loan.installments
+      .filter(inst => inst.status !== 'PAID')
       .sort((a, b) => a.installmentNumber - b.installmentNumber)
 
-    if (pendingInstallments.length === 0) {
-      throw new Error('No hay cuotas pendientes para recalcular tras el abono al capital')
+    if (recalculableInstallments.length === 0) {
+      throw new Error('No hay cuotas para recalcular tras el abono al capital. Todas están pagadas.')
     }
 
-    // Capital pendiente = suma de principal no pagado en cuotas PENDING
+    // Capital pendiente = suma de principal no pagado en cuotas recalculables
     const outstandingPrincipal = this.roundCurrency(
-      pendingInstallments.reduce(
+      recalculableInstallments.reduce(
         (sum, inst) =>
           sum + Math.max(0, Number(inst.principalAmount) - Number(inst.paidPrincipal || 0)),
         0
@@ -486,10 +487,10 @@ export class PaymentService {
     const newPrincipal = this.roundCurrency(outstandingPrincipal - data.amount)
 
     // Valores anteriores para auditoría / respuesta
-    const oldInterestPerInstallment = Number(pendingInstallments[0].interestAmount)
-    const firstPendingDate = pendingInstallments[0].dueDate
-    const firstPendingNum = pendingInstallments[0].installmentNumber
-    const pendingCount = pendingInstallments.length
+    const oldInterestPerInstallment = Number(recalculableInstallments[0].interestAmount)
+    const firstRecalculableDate = recalculableInstallments[0].dueDate
+    const firstRecalculableNum = recalculableInstallments[0].installmentNumber
+    const recalculableCount = recalculableInstallments.length
 
     // Pre-calcular nuevo cronograma
     const calcRate = normalizeInterestRateForInput(
@@ -509,9 +510,9 @@ export class PaymentService {
         fixedInterestAmount: loan.fixedInterestAmount
           ? Number(loan.fixedInterestAmount)
           : undefined,
-        termMonths: pendingCount,
+        termMonths: recalculableCount,
         paymentFrequency: loan.paymentFrequency,
-        firstDueDate: firstPendingDate,
+        firstDueDate: firstRecalculableDate,
       })
     }
 
@@ -519,13 +520,13 @@ export class PaymentService {
       ? Number(newScheduleResult.installments[0]?.interestAmount || 0)
       : 0
 
-    // Interés de cuotas no-PENDING (no cambia)
-    const nonPendingInterest = loan.installments
-      .filter(inst => inst.status !== 'PENDING')
+    // Interés de cuotas PAID (no cambia)
+    const paidInterest = loan.installments
+      .filter(inst => inst.status === 'PAID')
       .reduce((sum, inst) => sum + Number(inst.interestAmount), 0)
 
     const newTotalInterest = this.roundCurrency(
-      nonPendingInterest + (newScheduleResult?.summary.totalInterest || 0)
+      paidInterest + (newScheduleResult?.summary.totalInterest || 0)
     )
 
     // ── Transacción atómica ──────────────────────────────────────────────────
@@ -552,9 +553,9 @@ export class PaymentService {
         },
       })
 
-      // 3. Eliminar cuotas PENDING
+      // 3. Eliminar TODAS las cuotas que NO sean PAID
       await tx.installment.deleteMany({
-        where: { loanId: data.loanId, status: 'PENDING' },
+        where: { loanId: data.loanId, status: { not: 'PAID' } },
       })
 
       // 4. Regenerar cronograma si queda capital
@@ -562,7 +563,7 @@ export class PaymentService {
         await tx.installment.createMany({
           data: newScheduleResult.installments.map((inst, idx) => ({
             loanId: data.loanId,
-            installmentNumber: firstPendingNum + idx,
+            installmentNumber: firstRecalculableNum + idx,
             dueDate: inst.dueDate,
             principalAmount: inst.principalAmount,
             interestAmount: inst.interestAmount,
@@ -655,7 +656,7 @@ export class PaymentService {
         newInterestPerInstallment,
         installmentsRecalculated: newScheduleResult?.installments.length || 0,
         interestSavings: this.roundCurrency(
-          (oldInterestPerInstallment - newInterestPerInstallment) * pendingCount
+          (oldInterestPerInstallment - newInterestPerInstallment) * recalculableCount
         ),
       },
     }

@@ -1,11 +1,12 @@
 'use client'
 
 /**
- * EditLoanModal — v2
+ * EditLoanModal — v3
  *
  * Modal de edición avanzada exclusivo para ADMIN.
  *
  * Campos editables en préstamos ACTIVOS:
+ *   · Saldo Pendiente de Capital (€) — override directo del capital restante
  *   · Tasa de interés (%)
  *   · Fecha del primer pago pendiente
  *   · Meses pendientes (aumentar o reducir)
@@ -16,8 +17,8 @@
  *   Paso 2 — Revisión de cambios (diff antes/después) → Confirmar
  *
  * Garantías:
- *   · Solo toca cuotas con status PENDING
- *   · PAID / PARTIAL / OVERDUE quedan intactas
+ *   · Solo las cuotas PAID se preservan
+ *   · PENDING / OVERDUE / PARTIAL se borran y regeneran
  *   · Todo en transacción atómica con AuditLog
  */
 
@@ -129,7 +130,10 @@ export function EditLoanModal({
   // ── Monto del crédito ─────────────────────────────────────────────────────
   const [newPrincipal, setNewPrincipal] = useState<string>(String(principalAmount))
 
-  // ── Tasa ──────────────────────────────────────────────────────────────────
+  // ── Saldo pendiente de capital (override directo) ─────────────────────
+  const [newOutstanding, setNewOutstanding] = useState<string>('')
+
+  // ── Tasa ────────────────────────────────────────────────────────────────
   const isPercentage     = interestType !== 'FIXED_AMOUNT'
   const currentRateHuman = toHumanRate(currentInterestRate)
   const [newRate, setNewRate] = useState<string>(String(currentRateHuman))
@@ -150,19 +154,23 @@ export function EditLoanModal({
 
   // ── Cálculo de cambios (para el diff) ─────────────────────────────────────
   const parsedPrincipal   = parseFloat(newPrincipal)
+  const parsedOutstanding = parseFloat(newOutstanding)
   const parsedRate        = parseFloat(newRate)
   const parsedMonths      = parseInt(newPendingMonths)
   const principalChanged  = !isNaN(parsedPrincipal) && parsedPrincipal > 0 && parsedPrincipal !== principalAmount
+  const outstandingChanged = !isNaN(parsedOutstanding) && parsedOutstanding > 0 && parsedOutstanding !== outstandingPrincipal
   const rateChanged       = isPercentage && !isNaN(parsedRate) && parsedRate !== currentRateHuman
   const dateChanged       = newFirstDate !== toInputDate(firstPendingDueDate) && newFirstDate !== ''
   const monthsChanged     = !isNaN(parsedMonths) && parsedMonths !== pendingInstallmentsCount
 
   // Capital pendiente efectivo para preview de interés (refleja la corrección)
-  const effectiveOutstanding = principalChanged
+  const effectiveOutstanding = outstandingChanged
+    ? parsedOutstanding
+    : principalChanged
     ? outstandingPrincipal + (parsedPrincipal - principalAmount)
     : outstandingPrincipal
 
-  const hasFinancialChange = principalChanged || rateChanged || dateChanged || monthsChanged
+  const hasFinancialChange = principalChanged || outstandingChanged || rateChanged || dateChanged || monthsChanged
   const hasAnyChange       =
     hasFinancialChange ||
     notes.trim()      !== (currentNotes ?? '').trim() ||
@@ -186,6 +194,10 @@ export function EditLoanModal({
     if (principalChanged || newPrincipal !== String(principalAmount)) {
       if (isNaN(parsedPrincipal) || parsedPrincipal <= 0)
         return 'El monto del crédito debe ser un número mayor a 0'
+    }
+    if (outstandingChanged) {
+      if (isNaN(parsedOutstanding) || parsedOutstanding <= 0)
+        return 'El saldo pendiente debe ser un número mayor a 0'
     }
     if (isPercentage && rateChanged) {
       if (isNaN(parsedRate) || parsedRate <= 0 || parsedRate > 100)
@@ -214,10 +226,11 @@ export function EditLoanModal({
     setError(null)
     const payload: Record<string, unknown> = {}
 
-    if (principalChanged) payload.principalAmount      = parsedPrincipal
-    if (rateChanged)      payload.interestRate         = parsedRate
-    if (dateChanged)      payload.newFirstPendingDate  = new Date(newFirstDate).toISOString()
-    if (monthsChanged)    payload.pendingMonths        = parsedMonths
+    if (principalChanged)    payload.principalAmount      = parsedPrincipal
+    if (outstandingChanged)  payload.outstandingPrincipal = parsedOutstanding
+    if (rateChanged)         payload.interestRate         = parsedRate
+    if (dateChanged)         payload.newFirstPendingDate  = new Date(newFirstDate).toISOString()
+    if (monthsChanged)       payload.pendingMonths        = parsedMonths
     payload.notes              = notes.trim() || null
     payload.clientInstructions = clientInstr.trim() || null
 
@@ -247,6 +260,7 @@ export function EditLoanModal({
     setError(null)
     setSuccess(false)
     setNewPrincipal(String(principalAmount))
+    setNewOutstanding('')
     setNewRate(String(currentRateHuman))
     setNewFirstDate(toInputDate(firstPendingDueDate))
     setNewPendingMonths(String(pendingInstallmentsCount))
@@ -297,9 +311,9 @@ export function EditLoanModal({
                 Editar Préstamo — {loanNumber}
               </DialogTitle>
               <DialogDescription>
-                Corrige las condiciones del préstamo. Solo las cuotas{' '}
-                <span className="font-medium">PENDIENTES</span> se recalcularán.
-                Las pagadas, vencidas o parciales quedan intactas.
+                Corrige las condiciones del préstamo. Todas las cuotas{' '}
+                <span className="font-medium">NO PAGADAS</span> se recalcularán
+                (PENDIENTES, VENCIDAS y PARCIALES). Solo las pagadas quedan intactas.
               </DialogDescription>
             </DialogHeader>
 
@@ -318,16 +332,36 @@ export function EditLoanModal({
                   value={newPrincipal}
                   onChange={e => setNewPrincipal(e.target.value)}
                 />
-                {principalChanged && (
+                <p className="text-xs text-muted-foreground">
+                  Corrección del monto original en caso de error de tipeo. Recalcula las cuotas no pagadas.
+                </p>
+              </div>
+
+              {/* ── Saldo Pendiente de Capital (NUEVO) ─────────────────── */}
+              <div className="space-y-2">
+                <Label htmlFor="edit-outstanding" className="font-semibold text-blue-700">
+                  💰 Saldo Pendiente de Capital (€)
+                </Label>
+                <Input
+                  id="edit-outstanding"
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  value={newOutstanding}
+                  onChange={e => setNewOutstanding(e.target.value)}
+                  placeholder={`Actual: ${outstandingPrincipal.toFixed(2)}€`}
+                />
+                {outstandingChanged && (
                   <p className="text-xs font-semibold text-blue-600">
-                    → Capital pendiente ajustado a {formatCurrency(Math.max(0, effectiveOutstanding))}
+                    → Las cuotas se recalcularán sobre {formatCurrency(parsedOutstanding)}
                     <span className="text-muted-foreground font-normal ml-1">
-                      (antes: {formatCurrency(outstandingPrincipal)})
+                      (actual: {formatCurrency(outstandingPrincipal)})
                     </span>
                   </p>
                 )}
                 <p className="text-xs text-muted-foreground">
-                  Corrección del monto original en caso de error de tipeo. Recalcula las cuotas pendientes.
+                  <strong>Usa este campo para corregir préstamos.</strong> Ejemplo: si el cliente abonó 5.000€ al capital
+                  de un crédito de 9.000€, pon 4.000€ aquí. Las cuotas futuras se recalcularán sobre ese monto.
                 </p>
               </div>
 
@@ -348,7 +382,7 @@ export function EditLoanModal({
                     onChange={e => setNewRate(e.target.value)}
                   />
                   {/* Preview en euros */}
-                  {newMonthlyInterest !== null && outstandingPrincipal > 0 && (
+                  {newMonthlyInterest !== null && effectiveOutstanding > 0 && (
                     <p className="text-xs font-semibold text-blue-600">
                       → {formatCurrency(newMonthlyInterest)} de interés por cuota
                       {rateChanged && (
@@ -494,7 +528,7 @@ export function EditLoanModal({
                         label="Interés / cuota"
                         before={formatCurrency(oldMonthlyInterest)}
                         after={formatCurrency(newMonthlyInterest)}
-                        changed={rateChanged}
+                        changed={rateChanged || outstandingChanged || principalChanged}
                       />
                     )}
                     <DiffRow
@@ -504,17 +538,25 @@ export function EditLoanModal({
                       changed={dateChanged}
                     />
                     <DiffRow
-                      label="Cuotas pendientes"
+                      label="Cuotas a recalcular"
                       before={`${pendingInstallmentsCount} cuota${pendingInstallmentsCount !== 1 ? 's' : ''}`}
                       after={`${isNaN(parsedMonths) ? pendingInstallmentsCount : parsedMonths} cuota${parsedMonths !== 1 ? 's' : ''}`}
                       changed={monthsChanged}
                     />
+                    {outstandingChanged && (
+                      <DiffRow
+                        label="Saldo Pendiente"
+                        before={formatCurrency(outstandingPrincipal)}
+                        after={formatCurrency(parsedOutstanding)}
+                        changed={true}
+                      />
+                    )}
                     {oldTotalInterestApprox !== null && newTotalInterestApprox !== null && (
                       <DiffRow
                         label="Interés total aprox."
                         before={formatCurrency(oldTotalInterestApprox)}
                         after={formatCurrency(newTotalInterestApprox)}
-                        changed={rateChanged || monthsChanged}
+                        changed={rateChanged || monthsChanged || outstandingChanged}
                       />
                     )}
                     <DiffRow
@@ -536,14 +578,14 @@ export function EditLoanModal({
               {/* ── Advertencia si hay cambio financiero ─────────────────── */}
               {hasFinancialChange && (
                 <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">
-                  <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5 text-amber-500" />
+                    <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5 text-amber-500" />
                   <div>
                     <p className="font-semibold mb-0.5">
-                      Se recalcularán {isNaN(parsedMonths) ? pendingInstallmentsCount : parsedMonths} cuota{parsedMonths !== 1 ? 's' : ''} PENDIENTE{parsedMonths !== 1 ? 'S' : ''}.
+                      Se recalcularán {isNaN(parsedMonths) ? pendingInstallmentsCount : parsedMonths} cuota{parsedMonths !== 1 ? 's' : ''} NO PAGADA{parsedMonths !== 1 ? 'S' : ''}.
                     </p>
                     <p>
-                      Las cuotas PAGADAS, VENCIDAS y PARCIALMENTE PAGADAS conservan
-                      sus montos y fechas originales.
+                      Las cuotas PAGADAS conservan sus montos y fechas originales.
+                      Las cuotas VENCIDAS y PARCIALES sin pago se regenerarán.
                     </p>
                   </div>
                 </div>
